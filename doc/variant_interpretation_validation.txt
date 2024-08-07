@@ -1,0 +1,27 @@
+# The steps taken to evaluate and validate the performance of the BIAS software
+
+# Download the Erepo dataset by going to this website
+# https://erepo.clinicalgenome.org/evrepo/
+# and clicking the download button then downloading the tsv as erepo.tabbed.txt
+
+# Go to the scripts directory for the next steps as some of the scripts have peculiar pathing requirements
+cd src/scripts
+
+# Run the python script to convert the erepo data into an hg19 vcf file
+python erepo_to_vcf.py
+
+# Sort the vcf file
+bcftools sort output.vcf -o sorted_output.vcf
+
+# You will need to download and install Illumina Connected Annotations,
+# https://developer.illumina.com/illumina-connected-annotations
+# NOTE: This requires an Illumina account, you must also download the hg19 ICA/Nirvana reference files 
+
+# Run Illumina Connected Annotations
+dotnet ~/Bioinformatics/bin/IlluminaConnectedAnnotations/Nirvana.dll --cache ~/Bioinformatics/data/ICA/Cache --sd ~/Bioinformatics/data/SupplementaryAnnotation/GRCh37 --ref ~/Bioinformatics/data/ICA/References/Homo_sapiens.GRCh37.Nirvana.dat --in sorted_output.vcf -o erepo_nirvana
+
+# Run the bitscopic interpreting ACMG standards (BIAS) software to classify the erepo data 
+python ../../bias-2015.py erepo_nirvana.json.gz ../../config/requiredPaths.json erepo_bitscopic_classifications.tsv
+
+# Compare the bitscopic classifications to the erepo classifications and calculate sensitivity and specificity
+python evaluate_bias_erepo_validation.py erepo.tabbed.txt erepo_bitscopic_classifications.tsv sorted_output.vcf

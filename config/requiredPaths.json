@@ -1,0 +1,11 @@
+{
+    "lof_gene_fp": "./config/hg19_lof_genes.tsv",
+    "ncbi_ref_seq_hgmd_fp": "./config/hg19_ncbiRefSeqHgmd.tsv",
+    "clinvar_pathogenic_aa_fp": "./config/hg19_clinvar_pathogenic_aa.tsv",
+    "gwas_dbsnp_fp": "./config/gwasCatalog.txt",
+    "coding_repeat_region_fp": "./config/hg19_coding_repeat_regions.tsv",
+    "missense_pathogenic_genes_fp": "./config/hg19_missense_pathogenic_genes.tsv",
+    "truncating_genes_fp": "./config/hg19_truncating_genes.tsv",
+    "pathogenic_domains_fp": "./config/hg19_pathogenic_domains.tsv",
+    "literature_supported_variants_fp": "./config/hg19_literature_supported_variants.tsv"
+}
