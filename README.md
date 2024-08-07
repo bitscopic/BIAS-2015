@@ -12,8 +12,7 @@ BIAS-2015 exclusively uses Python3 standard libraries, you should not need to in
 
 ## Running the pipeline ##
 
-### Included in the repository is a set of test data. If the code is installed and setup correctly, the following 
-### commands should complete in <10 seconds.
+Included in the repository is a set of test data. If the code is installed and setup correctly, the following commands should complete in <10 seconds.
 ```
 python bias-2015.py test/data/bias-2015_test_file.json config/requiredPaths.json test_output.tsv
 ```
@@ -23,20 +22,20 @@ If you used the same data source files as the manuscript, you can verify the sam
 diff test_output.tsv test/data/bias-2015-expected_test_output.tsv
 ```
 
-### To include your own classifiers, please provide the optional --user_classifiers flag
+To include your own classifiers, please provide the optional --user_classifiers flag
 ```
 python bias-2015.py test/data/bias-2015_test_file.json config/requiredPaths.json test_output.tsv --user_classifiers my_classifiers.tsv
 ```
 
-### Classifier files are the same format as BIAS-2015 output! If you have many variants need to be updated, or you wish to update
-### your variant classifications with your own script, we recommend you run the pipeline first to make a classifier template then
-### update the template. Once you have your classifiers ready in the template file, rerun the pipeline. 
+Classifier files are the same format as BIAS-2015 output! If you have many variants need to be updated, or you wish to update
+your variant classifications with your own script, we recommend you run the pipeline first to make a classifier template then
+update the template. Once you have your classifiers ready in the template file, rerun the pipeline. 
 
 ```
 python bias-2015.py test/data/bias-2015_test_file.json config/requiredPaths.json test_output.tsv
 mv test_output.tsv my_classifiers.tsv
 ```
-### Either manually or programatically update my_classifiers.tsv to include your own ACMG classifiers. Then re run
+ Either manually or programatically update my_classifiers.tsv to include your own ACMG classifiers. Then re run
 ```
 python bias-2015.py test/data/bias-2015_test_file.json config/requiredPaths.json test_output.tsv --user_classifiers my_classifiers.tsv
 ```
