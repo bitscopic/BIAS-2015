@@ -19,6 +19,9 @@ def parseArgs():
     parser.add_argument("clinvar_vcf",
                         help = " Input file 1",
                         action = "store")
+    parser.add_argument("output",
+                        help = " Output file 1",
+                        action = "store")
     parser.add_argument("--verbose",
                         help = " The verbosity level for stdout messages (default INFO)",
                         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
@@ -209,7 +212,7 @@ def identify_domains(uniprot_accession_to_clinvar_significance):
     return benign_domains, pathogenic_domains
 
 
-def evaluate_clinvar_domains(in_vcf):
+def evaluate_clinvar_domains(in_vcf, pathogenic_output):
     """
     Evaluate the clinvar domain information. Identify the variants associated with each domain.
     
@@ -232,7 +235,7 @@ def evaluate_clinvar_domains(in_vcf):
         for domain_data in sorted(benign_domains, key=lambda x: x[0]):
             o_file.write(f"{domain_data[0]}\t{domain_data[1]}\t{domain_data[2]}\n")
 
-    with open("pathogenic_domains.tsv", 'w') as o_file:
+    with open(pathogenic_output, 'w') as o_file:
         for domain_data in sorted(pathogenic_domains, key=lambda x: x[0]):
             o_file.write(f"{domain_data[0]}\t{domain_data[1]}\t{domain_data[2]}\n")
 
@@ -241,7 +244,7 @@ def main():
     main function, calls other functions
     """
     options = parseArgs()
-    evaluate_clinvar_domains(options.clinvar_vcf)
+    evaluate_clinvar_domains(options.clinvar_vcf, options.output)
 
 if __name__ == "__main__":
     sys.exit(main())
