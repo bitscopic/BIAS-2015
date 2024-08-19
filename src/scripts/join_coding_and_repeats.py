@@ -81,14 +81,55 @@ def parse_file(filepath, chrom_col, start_col, end_col, strand_col=None):
             intervals[chrom].append((start, end, strand))
     return intervals
 
+def parse_rmsk(filepath):
+    """
+    Parse the repeat masker regions into intervals
+
+    ex row; NOTE: There are no headers by default. 
+    585	1504	13	4	13	chr1	10000	10468	-249240153	+	(CCCTAA)n	Simple_repeat	Simple_repeat	1	463	0	1
+    """
+    intervals = {}
+    with open(filepath, 'r') as in_file:
+        for line in in_file:
+            split_line = line.strip().split()
+            chrom = split_line[5]
+            start = int(split_line[6])
+            end = int(split_line[7])
+            strand = split_line[9]
+            if chrom not in intervals:
+                intervals[chrom] = []
+            intervals[chrom]. append((start, end, strand))
+    return intervals
+
+
+def parse_ccds(filepath):
+    """
+    Parse the consensus coding regions into intervals
+
+    ex row; NOTE: There are no headers by default. 
+    585	CCDS30547.1	chr1	+	69090	70008	69090	70008	1	69090,	70008,	0		cmpl	cmpl	0,
+    """
+    intervals = {}
+    with open(filepath, 'r') as in_file:
+        for line in in_file:
+            split_line = line.strip().split()
+            chrom = split_line[2]
+            start = int(split_line[4])
+            end = int(split_line[5])
+            strand = split_line[3]
+            if chrom not in intervals:
+                intervals[chrom] = []
+            intervals[chrom]. append((start, end, strand))
+    return intervals
+
 def main():
     """
     Load the two files then find any repeat regions that overlap with the consensus coding regions
     """
     options = parseArgs()
     
-    repeat_regions_intervals = parse_file(options.inRepeatFile, 'genoName', 'genoStart', 'genoEnd', 'strand')
-    consensus_coding_intervals = parse_file(options.inConsensusCodingFile, 'chrom', 'txStart', 'txEnd', 'strand')
+    repeat_regions_intervals = parse_rmsk(options.inRepeatFile)
+    consensus_coding_intervals = parse_ccds(options.inConsensusCodingFile)
 
     # Step 2: Build an interval tree for the second file
     interval_trees = {}

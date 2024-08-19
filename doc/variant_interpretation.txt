@@ -16,6 +16,8 @@
 #      ~/Bioinformatics/data/
 # we ran all commands inside the config directory
 
+dotnet ~/Bioinformatics/bin/IlluminaConnectedAnnotations/Downloader.dll --ga GRCh37 -o ~/Bioinformatics/data
+
 # The specific data versions used are cited here;
     1000_Genomes_Project_(SV)_Phase_3_v5a.nsi (GRCh37)            
     1000_Genomes_Project_Phase_3_v5a_refMinor.rma (GRCh37)        
@@ -71,7 +73,7 @@
 # Genes where loss of function is a mechanism of pathogenicity
 wget https://storage.googleapis.com/gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz
 bgzip -d gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz
-python ../src/scripts/find_lof_genes.py ~/Downloads/gnomad.v2.1.1.lof_metrics.by_gene.txt hg19_generic_LOF_genes.txt
+python ../src/scripts/find_lof_genes.py gnomad.v2.1.1.lof_metrics.by_gene.txt hg19_generic_LOF_genes.txt
 
 # Use UCSC's FTP server to download files. For PVS1 Caveate 2
 wget https://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/ncbiRefSeqHgmd.txt.gz
@@ -98,7 +100,7 @@ grep -E 'CLNSIG=Likely_pathogenic|CLNSIG=Pathogenic' clinvar_with_chr.vcf >> cle
 dotnet ~/Bioinformatics/bin/IlluminaConnectedAnnotations/Nirvana.dll --cache ~/Bioinformatics/data/ICA/Cache --sd ~/Bioinformatics/data/SupplementaryAnnotation/GRCh37 --ref ~/Bioinformatics/data/ICA/References/Homo_sapiens.GRCh37.Nirvana.dat --in clean_clinvar.vcf --o clean_clinvar_ica
 
 # Use the Nirvana annotated results to generate data files for interpretation
-python3 ../src/scripts/generate_pathogenic_aa_list.py clean_clinvar_ic.json.gz clean_clinvar.vcf hg19_clinvar_pathogenic_aa.tsv
+python3 ../src/scripts/generate_pathogenic_aa_list.py clean_clinvar_ica.json.gz clean_clinvar.vcf hg19_clinvar_pathogenic_aa.tsv
 
 # PS3
 # Download avada big bed from UCSC
@@ -126,7 +128,7 @@ gunzip gwasCatalog.txt.gz
 # PM1
 # Identify the uniprot domains that have a high degree of pathogenicity, these are writen to 
 # pathogenic_domains.tsv
-python ../src/scripts/generate_domain_lists.py clinvar.vcf
+python ../src/scripts/generate_domain_lists.py clinvar.vcf pathogenic_domaints.tsv
 
 # Get the UCSC uniprot domains track and convert it to a tsv file, then sort it
 wget https://hgdownload.soe.ucsc.edu/gbdb/hg19/uniprot/unipDomain.bb
@@ -139,12 +141,14 @@ join sorted_unipDomain.bed pathogenic_domains.tsv | awk '{print $2"\t"$3"\t"$4"\
 # For PM4 & BP3
 wget https://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/rmsk.txt.gz
 wget https://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/ccdsGene.txt.gz
-python3 ../src/scripts/join_coding_and_repeats.py --inRe ~/Downloads/repeat_regions.tsv --inCon ~/Downloads/consensus_coding.tsv --out hg19_coding_repeat_regions.tsv
+gunzip rmsk.txt.gz
+gunzip ccdsGene.txt.gz
+python3 ../src/scripts/join_coding_and_repeats.py --inRepeatFile rmsk.txt --inConsensusCodingFile ccdsGene.txt --out hg19_coding_repeat_regions.tsv
 
 ################### PP ######################
 
 # For PP2 and BP1
-python3 ../src/scripts/find_missense_pathogenic_genes.py clinvar.vcf config/core/hg19_missense_pathogenic_genes.tsv config/core/hg19_truncating_genes.tsv
+python3 ../src/scripts/find_missense_pathogenic_genes.py clinvar.vcf hg19_missense_pathogenic_genes.tsv hg19_truncating_genes.tsv
 
 # BP7
 # NOTE: 8bg download, may take several hours
