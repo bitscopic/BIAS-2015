@@ -8,7 +8,32 @@ This software is dual licensed. You may choose the AGPL license or contact us fo
 See doc/variant_interpretation.txt for generating the required data files. Once generated, update the paths in the file
 config/requiredPaths.json to reflect the appropriate paths on your machine.
 
+Alternatively, our version of the required data files can be downloaded here
+https://github.com/bitscopic/BIAS-2015-data
+
+Users will need the files in preprocessing_data/bias_2015_required_files/
+
 BIAS-2015 exclusively uses Python3 standard libraries, you should not need to install any other dependencies.
+
+To run the pipeline on a VCF file, you will first need to annotate it with Illumina Connected Annotations (ICA)
+
+ICA (formerly Nirvana) is a dotnet software package that is free to Download online here
+    https://support.illumina.com/downloads/illumina-connected-annotations.html
+
+BIAS-2015 currently supports hg19/GRCh37 classifications, as such you must annotate with the ICA hg19/GRCh37 dataset.
+
+```
+mkdir data
+dotnet IlluminaConnectedAnnotations/Downloader.dll --ga GRCh37 -o Data
+```
+
+We annotate our VCF with ICA/Nirvana in this manner
+```
+dotnet IlluminaConnectedAnnotations/Nirvana.dll --cache Data/Cache --sd Data/SupplementaryAnnotation/GRCh37 --ref Data/References/Homo_sapiens.GRCh37.Nirvana.dat --in test.vcf --o test_ica
+```
+
+If you are running DRAGEN >4.2, then you likely already have the output .json file in your results directory. You can
+run BIAS-2015 directly on this json file. 
 
 ## Running the pipeline ##
 
