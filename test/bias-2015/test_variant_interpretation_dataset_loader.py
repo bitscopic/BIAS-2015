@@ -99,15 +99,16 @@ def test_get_gene_name_to_3prime_region():
         # Clean up the temporary file
         os.remove(ncbi_ref_seq_hgmd_fp)
 
-# PS1
-def disabled_test_get_gene_mut_to_data():
+#PS1
+def test_get_gene_mut_to_data():
     """
-    NOTE: The implementation of this has changed and this test is now outdated. It needs to be re written. 
-    Test the get_gene_mut_to_data function.
+    This function tests the get_gene_mut_to_data function.
     """
-    test_data = "SAMD11\tR793*\t761448939\tcriteria provided, single submitter\tPathogenic\n" \
-                "ISG15\tE127*\t672601312\tcriteria provided, single submitter\tLikely_pathogenic\n" \
-                "AGRN\tG76S\t756623659\tcriteria provided, single submitter\tLikely_pathogenic"
+    test_data = (
+        "SAMD11\tR793*\t761448939\tcriteria provided, single submitter\tPathogenic\n"
+        "ISG15\tE127*\t672601312\tcriteria provided, single submitter\tLikely_pathogenic\n"
+        "AGRN\tG76S\t756623659\tcriteria provided, single submitter\tLikely_pathogenic"
+    )
 
     # Create a temporary file
     with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix='.txt') as tmp_file:
@@ -117,11 +118,20 @@ def disabled_test_get_gene_mut_to_data():
     try:
         # Perform the test
         gene_mut_to_data = vidl.get_gene_mut_to_data(clinvar_pathogenic_aa_fp)
-        expected_output = {
-            ("SAMD11", "R793*"): ("761448939", "criteria provided, single submitter", "Pathogenic"),
-            ("ISG15", "E127*"): ("672601312", "criteria provided, single submitter", "Likely_pathogenic"),
-            ("AGRN", "G76S"): ("756623659", "criteria provided, single submitter", "Likely_pathogenic")
-        }
+
+        expected_output = (
+            {
+                ("SAMD11", "R793*"): ("761448939", "criteria provided, single submitter", "Pathogenic"),
+                ("ISG15", "E127*"): ("672601312", "criteria provided, single submitter", "Likely_pathogenic"),
+                ("AGRN", "G76S"): ("756623659", "criteria provided, single submitter", "Likely_pathogenic")
+            },
+            {
+                ("SAMD11", "R793"): ("R793*", "761448939", "criteria provided, single submitter", "Pathogenic"),
+                ("ISG15", "E127"): ("E127*", "672601312", "criteria provided, single submitter", "Likely_pathogenic"),
+                ("AGRN", "G76"): ("G76S", "756623659", "criteria provided, single submitter", "Likely_pathogenic")
+            }
+        )
+
         assert gene_mut_to_data == expected_output
     finally:
         # Clean up the temporary file
