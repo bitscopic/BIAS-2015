@@ -211,3 +211,87 @@ def test_get_pathogenic_domains():
     finally:
         # Clean up the temporary file
         os.remove(pathogenic_domains_fp)
+
+#PM4
+def test_get_chrom_to_repeat_regions():
+    """
+    Test the get_chrom_to_repeat_regions function with three lines of data
+    """
+    # Data from hg19_coding_repeat_regions.tsv
+    test_data = "chr1\t16777160\t16777470\t+\n" + \
+                "chr1\t25165800\t25166089\t-\n" + \
+                "chr1\t33553606\t33554646\t+\n"
+
+    # Create a temporary file
+    with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix='.tsv') as tmp_file:
+        coding_repeat_region_fp = tmp_file.name
+        tmp_file.write(test_data)
+
+    try:
+        # Perform the test
+        chrom_to_repeat_regions = vidl.get_chrom_to_repeat_regions(coding_repeat_region_fp)
+        expected_output = {
+            "chr1": [
+                (16777160, 16777470, "+"),
+                (25165800, 25166089, "-"),
+                (33553606, 33554646, "+")
+            ]
+        }
+        assert chrom_to_repeat_regions == expected_output
+    finally:
+        # Clean up the temporary file
+        os.remove(coding_repeat_region_fp)
+
+#PP2
+def test_get_missense_pathogenic_genes():
+    """
+    Test the get_missense_pathogenic_genes function
+    """
+    # Data from hg19_missense_pathogenic_genes.tsv
+    test_data = "AAAS\t1.0\t0.0\n" + \
+                "ABCC9\t1.0\t0.006745362563237774\n" + \
+                "ABCD1\t1.0\t0.0\n"
+
+    # Expected output
+    expected_genes = ["AAAS", "ABCC9", "ABCD1"]
+
+    # Create a temporary file
+    with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix='.txt') as tmp_file:
+        missense_pathogenic_genes_fp = tmp_file.name
+        tmp_file.write(test_data)
+
+    try:
+        # Perform the test
+        missense_pathogenic_genes = vidl.get_missense_pathogenic_genes(missense_pathogenic_genes_fp)
+        assert missense_pathogenic_genes == expected_genes
+    finally:
+        # Clean up the temporary file
+        os.remove(missense_pathogenic_genes_fp)
+
+#BP1
+def test_get_truncating_genes():
+    """
+    Test the get_truncating_genes function
+    """
+    # Data from hg19_truncating_genes.tsv
+    test_data = "ABCA2\t1.0\n" + \
+                "ABCC2\t1.0\n" + \
+                "ABHD12\t1.0\n" + \
+                "ADAM17\t0.8333333333333334\n" + \
+                "ADAMTS13\t1.0\n"
+
+    # Expected output
+    expected_genes = ["ABCA2", "ABCC2", "ABHD12", "ADAM17", "ADAMTS13"]
+
+    # Create a temporary file
+    with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix='.txt') as tmp_file:
+        truncating_genes_fp = tmp_file.name
+        tmp_file.write(test_data)
+
+    try:
+        # Perform the test
+        truncating_genes = vidl.get_truncating_genes(truncating_genes_fp)
+        assert truncating_genes == expected_genes
+    finally:
+        # Clean up the temporary file
+        os.remove(truncating_genes_fp)
