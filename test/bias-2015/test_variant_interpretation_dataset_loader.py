@@ -153,29 +153,52 @@ def test_get_gloc_to_pubmed_id_list():
         # Clean up the temporary file
         os.remove(literature_supported_variants_fp)
 
-# PS4
-def disabled_test_get_dbsnpids_to_or():
+def test_get_dbsnpids_to_or():
     """
     NOTE: The implementation of this was updated and this test is outdated. It will need to be re written
     Test the get_dbsnpids_to_or function.
     """
-    test_data = "30578418\tPulse pressure\trs537750491\t7e-20\t6.0784\t4.77\t-7.38\n" + \
-                "30578418\tPulse pressure\trs530130707\t4e-19\t6.796\t5.3\t-8.29\n" + \
-                "31490055\tCocaine use disorder x non-traditional parental care interaction\tchr1:15511771\t9e-10\t6.124\t0\t0"
+    td = [
+    "590", 
+    "chr1", 
+    "768252", 
+    "768253", 
+    "rs2977608", 
+    "35023831", 
+    "Chong M", 
+    "2022-01-13", 
+    "Elife", 
+    "GWAS and ExWAS of blood Mitochondrial DNA copy number identifies 71 loci and highlights a potential causal role in dementia.", 
+    "Mitochondrial DNA copy number", 
+    "395,718 British, Irish, Other White, South Asian, African ancestry individuals", 
+    "NA", 
+    "1p36.3NR", 
+    "rs2977608-C", 
+    "0.489417",
+    "", 
+    "3E-21", 
+    "",
+    "7",
+    "",
+    "", 
+    "0.0236", ]
+    
+    test_data = "\n".join(["\t".join(td)])
 
     # Create a temporary file
     with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix='.txt') as tmp_file:
         gwas_dbsnp_fp = tmp_file.name
         tmp_file.write(test_data)
-
+        
     try:
         # Perform the test
         dbsnpid_to_data = vidl.get_dbsnpids_to_or(gwas_dbsnp_fp)
         expected_output = {
-            "rs537750491": (6.0784, 4.77, -7.38, "30578418", "Pulse pressure", 7e-20),
-            "rs530130707": (6.796, 5.3, -8.29, "30578418", "Pulse pressure", 4e-19),
-            "chr1:15511771": (6.124, 0.0, 0.0, "31490055", "Cocaine use disorder x non-traditional parental care interaction", 9e-10)
-        }
+            'chr1': {768252: (7.0, 0.0, 0.0, '35023831', 'GWAS and ExWAS of blood Mitochondrial DNA copy number identifies 71 loci and highlights a potential causal role in dementia.'
+                              , 3e-21, 'rs2977608')}
+                           }
+
+        
         assert dbsnpid_to_data == expected_output
     finally:
         # Clean up the temporary file
