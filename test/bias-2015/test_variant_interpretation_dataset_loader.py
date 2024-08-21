@@ -163,6 +163,7 @@ def test_get_gloc_to_pubmed_id_list():
         # Clean up the temporary file
         os.remove(literature_supported_variants_fp)
 
+#PS4
 def test_get_dbsnpids_to_or():
     """
     NOTE: The implementation of this was updated and this test is outdated. It will need to be re written
