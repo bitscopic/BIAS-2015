@@ -139,7 +139,7 @@ def get_gene_mut_to_data(clinvar_pathogenic_aa_fp):
             gene_mut_to_data[gene_mut] = (rs_id, criteria, signif) 
     if not gene_mut_to_data:
         print(f"File {clinvar_pathogenic_aa_fp} does not have any valid entries!")
-
+        
     return gene_mut_to_data, gene_aa_to_var_data
 
 # PS3
@@ -314,7 +314,7 @@ def get_chrom_to_repeat_regions(coding_repeat_region_fp):
         print(f"File {coding_repeat_region_fp} does not have any valid entries!")
     return chrom_to_repeat_regions
 
-# PP2
+# PP2 
 def get_missense_pathogenic_genes(missense_pathogenic_genes_fp):
     """
     Load in genes where missense is a common mechanism of pathogenicity
@@ -332,7 +332,7 @@ def get_missense_pathogenic_genes(missense_pathogenic_genes_fp):
         print(f"File {missense_pathogenic_genes_fp} does not have any valid entries!")
     return missense_pathogenic_genes
 
-# BP1
+# BP1 
 def get_truncating_genes(truncating_genes_fp):
     """
     Genes identifies from ClinVar where over 80% of pathogenic variants are truncating
