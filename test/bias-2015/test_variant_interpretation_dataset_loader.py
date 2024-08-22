@@ -144,7 +144,7 @@ def test_get_gloc_to_pubmed_id_list():
     """
     test_data = "chr1\t1014142\t1014143\t25307056\n" + \
                 "chr1\t1014142\t1014143\t25307056\n" + \
-                "chr1\t1014313\t1014314\t22859821"
+                "chr1\t1014313\t1014315\t22859821"
 
     # Create a temporary file
     with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix='.txt') as tmp_file:
@@ -155,8 +155,8 @@ def test_get_gloc_to_pubmed_id_list():
         # Perform the test
         gloc_to_pubmed_id_list = vidl.get_gloc_to_pubmed_id_list(literature_supported_variants_fp)
         expected_output = {
-            ("chr1", 1014142): ["25307056"],
-            ("chr1", 1014313): ["22859821"]
+            ("chr1", '1014142', '1014143'): ["25307056"],
+            ("chr1", '1014313', '1014315'): ["22859821"]
         }
         assert gloc_to_pubmed_id_list == expected_output
     finally:
@@ -205,7 +205,8 @@ def test_get_dbsnpids_to_or():
         # Perform the test
         dbsnpid_to_data = vidl.get_dbsnpids_to_or(gwas_dbsnp_fp)
         expected_output = {
-            'chr1': {768252: (7.0, 0.0, 0.0, '35023831', 'GWAS and ExWAS of blood Mitochondrial DNA copy number identifies 71 loci and highlights a potential causal role in dementia.'
+            'chr1': {768252: (7.0, 0.0, 0.0, '35023831',
+                              'GWAS and ExWAS of blood Mitochondrial DNA copy number identifies 71 loci and highlights a potential causal role in dementia.'
                               , 3e-21, 'rs2977608')}
                            }
 
