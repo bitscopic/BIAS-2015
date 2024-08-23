@@ -151,7 +151,6 @@ def test_get_ps1():
     score, ps1 = pathogenic_classifiers.get_ps1(gene_name, aa_mut, gene_mut_to_data)
     assert (score, ps1) == (expected_score, expected_ps1)
 
-
 def test_get_ps3_single_pubmed():
     """
     Test the get_ps3 function with a single pubmed ID supporting the variant.
@@ -288,3 +287,130 @@ def test_get_pm1_very_strong():
     expected_score = 3
     expected_pm1 = "PM1 (3): Variant is in domain, P21912 where (0.970909091 %) variants are associated with pathogenicity (var score 75)."
     assert (score, pm1) == (expected_score, expected_pm1)
+
+def test_get_pm2_absent():
+    """
+    Test the get_pm2 function when the variant is absent 
+    """
+    # Initialize the variant data
+    variant = extract_from_nirvana_json.VariantData(
+        chromosome="chr1",
+        position=17350500,
+        ref_allele="A",
+        alt_allele="T",
+        variant_type="SNV",
+    )
+    
+    variant.gnomad = None
+    variant.oneKg = None
+
+    # Perform the test
+    score, pm2 = pathogenic_classifiers.get_pm2(variant)
+    expected_score = 1
+    expected_pm2 = "PM2 (1): Variant is missing from GNOMAD and 1000 Genomes"
+    assert (score, pm2) == (expected_score, expected_pm2)
+
+
+def test_get_pm2_low_af():
+    """
+    Test the get_pm2 function when the variant allele frequency is low
+    """
+    # Initialize the variant data
+    variant = extract_from_nirvana_json.VariantData(
+        chromosome="chr1",
+        position=17350500,
+        ref_allele="A",
+        alt_allele="T",
+        variant_type="SNV",
+    )
+
+    # Set gnomad and oneKg attributes
+    variant.gnomad = {"allAf": 0.005}
+    variant.oneKg = {"allAf": 0.002}
+
+    # Perform the test
+    score, pm2 = pathogenic_classifiers.get_pm2(variant)
+    expected_score = 1
+    expected_pm2 = "PM2 (1): 1000 Genomes general population AF=0.50% is below the threshold of 1.0%"
+    assert (score, pm2) == (expected_score, expected_pm2)
+
+def test_get_aa_comparator_simple():
+    """
+    Test the get_aa_comparator function with a simple protein notation
+    """
+    p_notation = "Y524S"
+    result = pathogenic_classifiers.get_aa_comparator(p_notation)
+    expected = "Y524"
+    assert result == expected
+
+def test_get_aa_comparator_complex():
+    """
+    Test the get_aa_comparator function with a complex protein notation
+    """
+    p_notation = "V552fsS26*"
+    result = pathogenic_classifiers.get_aa_comparator(p_notation)
+    expected = "V552"
+    assert result == expected
+
+def test_get_pm4_non_repeat_region():
+    """
+    Test the get_pm4 function when the variant is in a non-repeat region.
+    """
+    # Initialize the chrom_to_repeat_regions data
+    chrom_to_repeat_regions = {
+        "chr1": [(100000, 200000, "repeat1"), (300000, 400000, "repeat2")]
+    }
+
+    # Initialize the variant data
+    variant = extract_from_nirvana_json.VariantData(
+        chromosome="chr1",
+        position=250000,
+        ref_allele="ATG",
+        alt_allele="A",
+        variant_type="del"
+    )
+    
+    variant.consequence = "inframe_deletion"
+
+    # Perform the test
+    score, pm4 = pathogenic_classifiers.get_pm4(variant, chrom_to_repeat_regions)
+    expected_score = 1
+    expected_pm4 = "PM4 (1): inframe_deletion of ATG in a non-repeat region"
+    assert (score, pm4) == (expected_score, expected_pm4)
+
+def test_get_pm4_repeat_region(): #failing
+    """ 
+    Test the get_pm4 function when the variant is in a repeat region.
+    """
+    # Initialize the chrom_to_repeat_regions data
+    chrom_to_repeat_regions = {
+        "chr1": [(100000, 200000, "repeat1"), (300000, 400000, "repeat2")]
+    }
+
+    # Initialize the variant data
+    variant = extract_from_nirvana_json.VariantData(
+        chromosome="chr1",
+        position=150000,
+        ref_allele="A",
+        alt_allele="ATG",
+        variant_type="ins"
+    )
+
+    # Set the consequence attribute separately
+    variant.consequence = "inframe_insertion"
+
+    # Perform the test
+    score, pm4 = pathogenic_classifiers.get_pm4(variant, chrom_to_repeat_regions)
+    expected_score = 1
+    expected_pm4 = "PM4 (1): inframe_insertion of ATG in a repeat region"
+    breakpoint()
+    assert (score, pm4) == (expected_score, expected_pm4)
+
+
+#test_get_pm2 (done)
+#test_get_pm4 (not done)
+#test_get_aa_comparator (done)
+#test_get_pm5 (not done)
+#test_get_pp2 (not done)
+#test_get_pp3 (not done)
+#test_get_pp5 (not done)
