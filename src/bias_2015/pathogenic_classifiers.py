@@ -137,23 +137,18 @@ def get_ps3(variant, gloc_to_pubmed_id_list):
     ps3 = ""
     start_pos = int(variant.position)
     end_pos = start_pos + len(variant.refAllele)
-    all_pubmed_ids = set()
-    for x in range(start_pos, end_pos):
-        gloc = (variant.chromosome, x)
-        if gloc_to_pubmed_id_list.get(gloc):
-            for pubmed_id in gloc_to_pubmed_id_list[gloc]:
-                all_pubmed_ids.add(pubmed_id)
-
+    gloc = (variant.chromosome, str(start_pos), str(end_pos))
+    all_pubmed_ids = gloc_to_pubmed_id_list.get(gloc, "")
     total_pubmed_count = len(all_pubmed_ids)
     sorted_pubmed_ids = sorted(list(all_pubmed_ids))
-    if total_pubmed_count > 1:
+    if total_pubmed_count > 3: # NOTE: This ensures the variant is called pathogenic! 
         score = 2
         pubmed_str = ', '.join(sorted_pubmed_ids)
-        ps3 = f"PS3 ({score}) - Variants pathogenicity is supported by multiple pubmed studies {pubmed_str} as established by AVADA"
+        ps3 = f"PS3 ({score}): Variants pathogenicity is supported by multiple pubmed studies {pubmed_str} as established by AVADA"
     elif total_pubmed_count > 0:
         score = 1
         pubmed = sorted_pubmed_ids[0]
-        ps3 = f"PS3 ({score}) - Variants pathogenicity is supported by pubmed study {pubmed} as established by AVADA"
+        ps3 = f"PS3 ({score}): Variants pathogenicity is supported by pubmed study {pubmed} as established by AVADA"
     return score, ps3
 
 

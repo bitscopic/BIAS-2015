@@ -163,13 +163,12 @@ def get_gloc_to_pubmed_id_list(literature_supported_variants_fp):
             start = split_line[1]
             stop = split_line[2]
             pubmed_id = split_line[3]
-            for x in range(int(start), int(stop)):
-                pos = (chrom, x)
-                if gloc_to_pubmed_id_list.get(pos):
-                    if pubmed_id not in gloc_to_pubmed_id_list[pos]: 
-                        gloc_to_pubmed_id_list[pos].append(pubmed_id)
-                else:
-                    gloc_to_pubmed_id_list[pos] = [pubmed_id]
+            pos = (chrom, start, stop) 
+            if gloc_to_pubmed_id_list.get(pos):
+                if pubmed_id not in gloc_to_pubmed_id_list[pos]: 
+                    gloc_to_pubmed_id_list[pos].append(pubmed_id)
+            else:
+                gloc_to_pubmed_id_list[pos] = [pubmed_id]
     if not gloc_to_pubmed_id_list:
         print(f"File {literature_supported_variants_fp} does not have any valid entries!")
     return gloc_to_pubmed_id_list
