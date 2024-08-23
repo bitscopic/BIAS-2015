@@ -403,14 +403,186 @@ def test_get_pm4_repeat_region(): #failing
     score, pm4 = pathogenic_classifiers.get_pm4(variant, chrom_to_repeat_regions)
     expected_score = 1
     expected_pm4 = "PM4 (1): inframe_insertion of ATG in a repeat region"
-    breakpoint()
     assert (score, pm4) == (expected_score, expected_pm4)
 
+def test_get_pm5_pathogenic(): #failing
+    """
+    Test the get_pm5 function when the variant matches a known pathogenic variant.
+    """
+    # Initialize the gene_aa_to_var_data and gene_mut_to_data
+    gene_aa_to_var_data = {
+        ("AGRN", "Y425"): ("Y425*", "1239736447", "criteria provided, single submitter", "Pathogenic")
+    }
+    gene_mut_to_data = {}
 
-#test_get_pm2 (done)
-#test_get_pm4 (not done)
-#test_get_aa_comparator (done)
-#test_get_pm5 (not done)
-#test_get_pp2 (not done)
-#test_get_pp3 (not done)
-#test_get_pp5 (not done)
+    # Initialize the variant data
+    variant = extract_from_nirvana_json.VariantData(
+        chromosome="chr17",
+        position=41276045,
+        ref_allele="T",
+        alt_allele="C",
+        variant_type="SNV",
+    )
+    geneName="AGRN",
+    protein_variant="Y425*"
+
+    # Perform the test
+    score, pm5 = pathogenic_classifiers.get_pm5(variant, gene_aa_to_var_data, gene_mut_to_data)
+    expected_score = 2
+    expected_pm5 = "PM5 (2): Variant AA change Y425* is the same base AA as Y425* a Pathogenic variant with rs id 1239736447 and review status criteria provided, single submitter."
+    assert (score, pm5) == (expected_score, expected_pm5)
+
+def test_get_pm5_non_pathogenic(): 
+    """
+    Test the get_pm5 function when the variant does not match a known pathogenic variant.
+    """
+    # Initialize the gene_aa_to_var_data and gene_mut_to_data
+    gene_aa_to_var_data = {}
+    gene_mut_to_data = {}
+
+    # Initialize the variant data
+    variant = extract_from_nirvana_json.VariantData(
+        chromosome="chr17",
+        position=41276045,
+        ref_allele="T",
+        alt_allele="C",
+        variant_type="SNV",
+    )
+    
+    geneName="BRCA1",
+    protein_variant="Y524S"
+
+    # Perform the test
+    score, pm5 = pathogenic_classifiers.get_pm5(variant, gene_aa_to_var_data, gene_mut_to_data)
+    expected_score = 0
+    expected_pm5 = ""
+    assert (score, pm5) == (expected_score, expected_pm5)
+
+def test_get_pp2(): #failing
+    """
+    Test the get_pp2 function with a known missense variant in a gene that has a low rate
+    of benign missense variation.
+    """
+    # Initialize missense pathogenic genes
+    missense_pathogenic_genes = {"AGRN"}
+
+    # Initialize the variant data
+    variant = extract_from_nirvana_json.VariantData(
+        chromosome="chr17",
+        position=41276045,
+        ref_allele="T",
+        alt_allele="C",
+        variant_type="SNV",
+    )
+    geneName="AGRN"
+    consequence="missense"
+
+    # Perform the test
+    score, pp2 = pathogenic_classifiers.get_pp2(variant, missense_pathogenic_genes)
+    expected_score = 1
+    expected_pp2 = "PP2 (1): Missense variant consequence missense in AGRN which was found to have a low rate of missense variation and where missense variants are a common mechanism of disease"
+    assert (score, pp2) == (expected_score, expected_pp2)
+
+def test_get_pp3(): #failing
+    """
+    Test the get_pp3 function with different levels of computational evidence.
+    """
+    # Test with various values for GERP, DANN, and REVEL
+    variant_1 = extract_from_nirvana_json.VariantData(
+        chromosome="chr17",
+        position=41276045,
+        ref_allele="T",
+        alt_allele="C",
+        variant_type="SNV",
+    )
+    revel=0.6
+    dann=0.8
+    gerp=2.5
+
+    # Perform the test
+    score, pp3 = pathogenic_classifiers.get_pp3(variant_1)
+    expected_score = 3
+    expected_pp3 = "PP3 (3): Computational evidence support a deleteterious effect; gerp 2.5 | dann 0.8 | revel 0.6"
+    assert (score, pp3) == (expected_score, expected_pp3)
+
+    # Test with only one positive computational evidence
+    variant_2 = extract_from_nirvana_json.VariantData(
+        chromosome="chr17",
+        position=41276045,
+        ref_allele="T",
+        alt_allele="C",
+        variant_type="SNV",
+        revel=0.4,
+        dann=0.8,
+        gerp=1.5
+    )
+
+    # Perform the test
+    score, pp3 = pathogenic_classifiers.get_pp3(variant_2)
+    expected_score = 1
+    expected_pp3 = "PP3 (1): Computational evidence support a deleteterious effect; gerp 1.5 | dann 0.8 | revel 0.4"
+    assert (score, pp3) == (expected_score, expected_pp3)
+
+    # Test with no positive computational evidence
+    variant_3 = extract_from_nirvana_json.VariantData(
+        chromosome="chr17",
+        position=41276045,
+        ref_allele="T",
+        alt_allele="C",
+        variant_type="SNV",
+    )
+    revel=0.3
+    dann=0.6
+    gerp=1.0
+
+    # Perform the test
+    score, pp3 = pathogenic_classifiers.get_pp3(variant_3)
+    expected_score = 0
+    expected_pp3 = ""
+    assert (score, pp3) == (expected_score, expected_pp3)
+
+def test_get_pp5(): #failing
+    """
+    Test the get_pp5 function with a variant reported as pathogenic in ClinVar.
+    """
+    # Initialize ClinVar review statuses and significance
+    clinvar_review_status_to_level = {
+        "criteria provided, single submitter": 1,
+        "criteria provided, multiple submitters, no conflicts": 2
+    }
+
+    # Initialize the variant data
+    variant = extract_from_nirvana_json.VariantData(
+        chromosome="chr17",
+        position=41276045,
+        ref_allele="T",
+        alt_allele="C",
+        variant_type="SNV",
+    )
+
+    clinvar_review_status="criteria provided, single submitter",
+    clinvar_significance="pathogenic"
+
+    # Perform the test
+    score, pp5 = pathogenic_classifiers.get_pp5(variant)
+    expected_score = 1
+    expected_pp5 = "PP5 (1): Variant was found reported as pathogenic in ClinVar with review status of criteria provided, single submitter."
+    assert (score, pp5) == (expected_score, expected_pp5)
+
+    # Test with a variant not reported as pathogenic
+    variant_2 = extract_from_nirvana_json.VariantData(
+        chromosome="chr17",
+        position=41276045,
+        ref_allele="T",
+        alt_allele="C",
+        variant_type="SNV",
+        clinvar_review_status="criteria provided, single submitter",
+        clinvar_significance="benign"
+    )
+
+    # Perform the test
+    score, pp5 = pathogenic_classifiers.get_pp5(variant_2)
+    expected_score = 0
+    expected_pp5 = ""
+    assert (score, pp5) == (expected_score, expected_pp5)
+
