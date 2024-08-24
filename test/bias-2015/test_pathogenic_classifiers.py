@@ -160,14 +160,14 @@ def test_get_ps3_single_pubmed():
 
     # Set up the test data
     gloc_to_pubmed_id_list = {
-        ("chr1", 1014142): ["25307056"],
-        ("chr1", 1014143): ["25307056"]
+        ("chr1", '1014142', '1014143'): ["25307056"],
+        ("chr1", '1014143', '1014145'): ["25307056"]
     }
 
     # Perform the test
     score, ps3 = pathogenic_classifiers.get_ps3(variant, gloc_to_pubmed_id_list)
     expected_score = 1
-    expected_ps3 = "PS3 (1) - Variants pathogenicity is supported by pubmed study 25307056 as established by AVADA"
+    expected_ps3 = "PS3 (1): Variants pathogenicity is supported by pubmed study 25307056 as established by AVADA"
     assert (score, ps3) == (expected_score, expected_ps3)
 
 
@@ -180,14 +180,14 @@ def test_get_ps3_multiple_pubmeds():
 
     # Set up the test data
     gloc_to_pubmed_id_list = {
-        ("chr1", 1014142): ["25307056", "22859821"],
-        ("chr1", 1014143): ["25307056"]
+        ("chr1", '1014142', '1014143'): ["25307056", "22859821", "1111", "124"],
+        ("chr1", '1014143', '1014145'): ["25307056"]
     }
 
     # Perform the test
     score, ps3 = pathogenic_classifiers.get_ps3(variant, gloc_to_pubmed_id_list)
     expected_score = 2
-    expected_ps3 = "PS3 (2) - Variants pathogenicity is supported by multiple pubmed studies 22859821, 25307056 as established by AVADA"
+    expected_ps3 = "PS3 (2): Variants pathogenicity is supported by multiple pubmed studies 1111, 124, 22859821, 25307056 as established by AVADA"
     assert (score, ps3) == (expected_score, expected_ps3)
 
 def test_get_ps4():

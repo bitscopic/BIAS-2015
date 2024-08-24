@@ -139,7 +139,7 @@ def get_gene_mut_to_data(clinvar_pathogenic_aa_fp):
             gene_mut_to_data[gene_mut] = (rs_id, criteria, signif) 
     if not gene_mut_to_data:
         print(f"File {clinvar_pathogenic_aa_fp} does not have any valid entries!")
-
+        
     return gene_mut_to_data, gene_aa_to_var_data
 
 # PS3
@@ -163,13 +163,12 @@ def get_gloc_to_pubmed_id_list(literature_supported_variants_fp):
             start = split_line[1]
             stop = split_line[2]
             pubmed_id = split_line[3]
-            for x in range(int(start), int(stop)):
-                pos = (chrom, x)
-                if gloc_to_pubmed_id_list.get(pos):
-                    if pubmed_id not in gloc_to_pubmed_id_list[pos]: 
-                        gloc_to_pubmed_id_list[pos].append(pubmed_id)
-                else:
-                    gloc_to_pubmed_id_list[pos] = [pubmed_id]
+            pos = (chrom, start, stop) 
+            if gloc_to_pubmed_id_list.get(pos):
+                if pubmed_id not in gloc_to_pubmed_id_list[pos]: 
+                    gloc_to_pubmed_id_list[pos].append(pubmed_id)
+            else:
+                gloc_to_pubmed_id_list[pos] = [pubmed_id]
     if not gloc_to_pubmed_id_list:
         print(f"File {literature_supported_variants_fp} does not have any valid entries!")
     return gloc_to_pubmed_id_list
@@ -315,7 +314,7 @@ def get_chrom_to_repeat_regions(coding_repeat_region_fp):
         print(f"File {coding_repeat_region_fp} does not have any valid entries!")
     return chrom_to_repeat_regions
 
-# PP2
+# PP2 
 def get_missense_pathogenic_genes(missense_pathogenic_genes_fp):
     """
     Load in genes where missense is a common mechanism of pathogenicity
@@ -333,7 +332,7 @@ def get_missense_pathogenic_genes(missense_pathogenic_genes_fp):
         print(f"File {missense_pathogenic_genes_fp} does not have any valid entries!")
     return missense_pathogenic_genes
 
-# BP1
+# BP1 
 def get_truncating_genes(truncating_genes_fp):
     """
     Genes identifies from ClinVar where over 80% of pathogenic variants are truncating
