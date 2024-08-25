@@ -222,7 +222,7 @@ def test_get_pm1():
     """
     # Initialize the pathogenic domains data
     pathogenic_domains = [
-        ("chr1", "17350491", "17354258", "P21912", 0.85091, 10),
+        ("chr1", "17350491", "17354258", "P21912", 0.85091, 10)
     ]
 
     # Initialize the variant data
