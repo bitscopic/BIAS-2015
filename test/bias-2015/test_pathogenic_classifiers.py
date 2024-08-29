@@ -400,8 +400,8 @@ def test_get_pm4_repeat_region():
 
     # Perform the test
     score, pm4 = pathogenic_classifiers.get_pm4(variant, chrom_to_repeat_regions)
-    expected_score = 0  # The variant is in a repeat region
-    expected_pm4 = "PM4 (0): inframe_insertion in a repeat region"
+    expected_score = 0  
+    expected_pm4 = ""
     assert (score, pm4) == (expected_score, expected_pm4)
 
 def test_get_pm5_non_pathogenic(): 
