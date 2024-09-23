@@ -3,7 +3,7 @@
 # the file path. A template is provided in the config directory, the user must update each path to include
 # the full path to the file on their machine. 
 
-# NOTE: This setup is currently for hg19/GRCh37
+# NOTE: This walkthrough is for hg19/GRCh37!
 
 # The user will need the Illumina Connected Annotations (ICA) software to run this code;
 #           IlluminaAnnotatedConnections (https://support.illumina.com/downloads/illumina-connected-annotations.html)
@@ -70,7 +70,8 @@ dotnet ~/Bioinformatics/bin/IlluminaConnectedAnnotations/Downloader.dll --ga GRC
 ################### PVS #####################
 
 # PVS1
-# Genes where loss of function is a mechanism of pathogenicity
+# Genes where loss of function is a mechanism of pathogenicity, we use GNOMAD to define these genes
+# Base downloads page is here if the wget does not work https://gnomad.broadinstitute.org/download
 wget https://storage.googleapis.com/gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz
 bgzip -d gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz
 python ../src/scripts/find_lof_genes.py gnomad.v2.1.1.lof_metrics.by_gene.txt hg19_generic_LOF_genes.txt
