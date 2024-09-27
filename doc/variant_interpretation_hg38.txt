@@ -1,0 +1,79 @@
+# Setup instructions for BIAS-2015 AMP/ACMG Variant interpretation, this walks through generating the required
+# files for interpretation. Config files are passed into the code through a json file that defines
+# the file path. A template is provided in the config directory, the user must update each path to include
+# the full path to the file on their machine. 
+
+# NOTE: This walkthrough is for hg38/GRCh38!
+
+# The user will need the Illumina Connected Annotations (ICA) software to run this code;
+#           IlluminaAnnotatedConnections (https://support.illumina.com/downloads/illumina-connected-annotations.html)
+# and the user will need the corresponding ICA datasets, obtainable by running the downloader (~3hrs)
+#           dotnet IlluminaConnectedAnnotations/Downloader.dll -ga GRCh37 --out .
+
+# For this walkthrough we have the ICA executable located on the machine at
+#      ~/Bioinformatics/bin/IlluminaConnectedAnnotations/Nirvana.dll
+# and the ICA data files are stored in their subdirectories on the machine at
+#      ~/Bioinformatics/data/
+# we ran all commands inside the config directory
+
+dotnet ~/Bioinformatics/bin/IlluminaConnectedAnnotations/Downloader.dll --ga GRCh38 -o ~/Bioinformatics/data
+
+# The specific data versions used are cited here;
+Description                                                     Status
+---------------------------------------------------------------------------
+1000_Genomes_Project_(SV)_Phase_3_v5a.nsi (GRCh38)                OK
+1000_Genomes_Project_Phase_3_v3_plus_refMinor.rma (GRCh38)        OK
+1000_Genomes_Project_Phase_3_v3_plus_refMinor.rma.idx (...        OK
+1000_Genomes_Project_Phase_3_v3_plus.nsa (GRCh38)                 OK
+1000_Genomes_Project_Phase_3_v3_plus.nsa.idx (GRCh38)             OK
+ClinGen_20160414.nsi (GRCh38)                                     OK
+ClinGen_disease_validity_curations_20240721.nga (GRCh38)          OK
+ClinGen_Dosage_Sensitivity_Map_20240721.nga (GRCh38)              OK
+ClinGen_Dosage_Sensitivity_Map_20240721.nsi (GRCh38)              OK
+ClinVar_20240630.nsa (GRCh38)                                     OK
+ClinVar_20240630.nsa.idx (GRCh38)                                 OK
+ClinVar_20240630.nsi (GRCh38)                                     OK
+ClinVarPreview_preview_20240630.nsa (GRCh38)                      OK
+ClinVarPreview_preview_20240630.nsa.idx (GRCh38)                  OK
+ClinVarPreview_preview_20240630.nsi (GRCh38)                      OK
+DANN_20200205.gsa (GRCh38)                                        OK
+DANN_20200205.gsa.idx (GRCh38)                                    OK
+dbSNP_151_globalMinor.nsa (GRCh38)                                OK
+dbSNP_151_globalMinor.nsa.idx (GRCh38)                            OK
+dbSNP_156.nsa (GRCh38)                                            OK
+dbSNP_156.nsa.idx (GRCh38)                                        OK
+DECIPHER_201509.nsi (GRCh38)                                      OK
+FusionCatcher_1.33.gfs (GRCh38)                                   OK
+GeneSymbols.ndb                                                   OK
+Gerp_20110522.gsa (GRCh38)                                        OK
+Gerp_20110522.gsa.idx (GRCh38)                                    OK
+GME_20160618.nsa (GRCh38)                                         OK
+GME_20160618.nsa.idx (GRCh38)                                     OK
+gnomAD_4.1.nsa (GRCh38)                                           OK
+gnomAD_4.1.nsa.idx (GRCh38)                                       OK
+gnomAD_exome_4.1.nsa (GRCh38)                                     OK
+gnomAD_exome_4.1.nsa.idx (GRCh38)                                 OK
+gnomAD_gene_scores_4.1.nga (GRCh38)                               OK
+gnomAD_LCR_2.1.lcr (GRCh38)                                       OK
+gnomAD_SV_4.1.nsi (GRCh38)                                        OK
+gnomAD-cnv_4.1.nsi (GRCh38)                                       OK
+GRCh38.Ensembl.ndb                                                OK
+GRCh38.RefSeq.ndb                                                 OK
+Homo_sapiens.GRCh38.Nirvana.dat                                   OK
+MITOMAP_20200819.nsa (GRCh38)                                     OK
+MITOMAP_20200819.nsa.idx (GRCh38)                                 OK
+MITOMAP_SV_20200819.nsi (GRCh38)                                  OK
+MultiZ100Way_20171006.pcs (GRCh38)                                OK
+phyloP_hg38.npd (GRCh38)                                          OK
+phyloP_hg38.npd.idx (GRCh38)                                      OK
+PhyloPPrimate_1.0.gsa (GRCh38)                                    OK
+PhyloPPrimate_1.0.gsa.idx (GRCh38)                                OK
+REVEL_20200205.nsa (GRCh38)                                       OK
+REVEL_20200205.nsa.idx (GRCh38)                                   OK
+TOPMed_freeze_5.nsa (GRCh38)                                      OK
+TOPMed_freeze_5.nsa.idx (GRCh38)                                  OK
+
+mkdir hg38_data
+cd hg38_data
+cp ../src/scripts/preprocessing_hg38.sh
+./preprocessing_hg38.sh
