@@ -5,6 +5,7 @@ ICA_BIN_DIR=~/Bioinformatics/bin/IlluminaConnectedAnnotations
 ICA_DATA_DIR=~/Bioinformatics/data
 CONFIG_DIR=~/Bioinformatics/config
 SCRIPTS_DIR=../src/scripts
+OUTPUT_DIR=$(pwd)  # This gets the absolute path to where the script is being run
 
 # Make sure to use full paths in your configuration file.
 echo "Running variant interpretation setup for BIAS-2015 on hg38/GRCh38"
@@ -51,6 +52,7 @@ python3 $SCRIPTS_DIR/extract_from_avada_track.py avada.bed hg38_literature_suppo
 # PS4 - Download GWAS catalog
 wget https://hgdownload.soe.ucsc.edu/goldenPath/hg38/database/gwasCatalog.txt.gz
 gunzip gwasCatalog.txt.gz
+mv gwasCatalog.txt hg38GwasCatalog.txt
 
 ################### PM ######################
 
@@ -77,5 +79,19 @@ python3 $SCRIPTS_DIR/join_coding_and_repeats.py --inRepeatFile rmsk.txt --inCons
 # PP2 & BP1 - Find missense pathogenic genes
 python3 $SCRIPTS_DIR/find_missense_pathogenic_genes.py clinvar.vcf hg38_missense_pathogenic_genes.tsv hg38_truncating_genes.tsv
 
-echo "Setup complete."
+# Create output JSON file with absolute paths
+cat << EOF > $OUTPUT_DIR/hg38_required_paths.json
+{
+    "lof_gene_fp": "$OUTPUT_DIR/hg38_lof_genes.tsv",
+    "ncbi_ref_seq_hgmd_fp": "$OUTPUT_DIR/hg38_ncbiRefSeqHgmd.tsv",
+    "clinvar_pathogenic_aa_fp": "$OUTPUT_DIR/hg38_clinvar_pathogenic_aa.tsv",
+    "gwas_dbsnp_fp": "$OUTPUT_DIR/hg38GwasCatalog.txt",
+    "coding_repeat_region_fp": "$OUTPUT_DIR/hg38_coding_repeat_regions.tsv",
+    "missense_pathogenic_genes_fp": "$OUTPUT_DIR/hg38_missense_pathogenic_genes.tsv",
+    "truncating_genes_fp": "$OUTPUT_DIR/hg38_truncating_genes.tsv",
+    "pathogenic_domains_fp": "$OUTPUT_DIR/hg38_pathogenic_domains.tsv",
+    "literature_supported_variants_fp": "$OUTPUT_DIR/hg38_literature_supported_variants.tsv"
+}
+EOF
 
+echo "Setup complete. Output written to $OUTPUT_DIR/hg38_required_paths.json."

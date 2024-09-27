@@ -42,4 +42,4 @@ if __name__ == '__main__':
     parser.add_argument('--pli_threshold', type=float, default=0.8, help='Threshold for pLI score (default: 0.8).')
 
     args = parser.parse_args()
-    filter_lof_genes(args.input_file, args.output_file, args.pli_threshold)
+    filter_lof_genes(args.input_file, args.output_file, args.ref_build, args.pli_threshold)

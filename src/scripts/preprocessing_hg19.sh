@@ -5,6 +5,7 @@ ICA_BIN_DIR=~/Bioinformatics/bin/IlluminaConnectedAnnotations
 ICA_DATA_DIR=~/Bioinformatics/data
 CONFIG_DIR=~/Bioinformatics/config
 SCRIPTS_DIR=../src/scripts
+OUTPUT_DIR=$(pwd)  # This gets the absolute path to where the script is being run
 
 # Make sure to use full paths in your configuration file.
 echo "Running variant interpretation setup for BIAS-2015 on hg19/GRCh37"
@@ -14,7 +15,7 @@ echo "Running variant interpretation setup for BIAS-2015 on hg19/GRCh37"
 # PVS1 - Download the gnomAD constraint metrics
 wget https://storage.googleapis.com/gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz
 bgzip -d gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz
-python ../src/scripts/find_lof_genes.py gnomad.v2.1.1.lof_metrics.by_gene.txt hg19_generic_LOF_genes.txt hg19
+python ../src/scripts/find_lof_genes.py gnomad.v2.1.1.lof_metrics.by_gene.txt hg19_lof_genes.tsv hg19
 
 # PVS1 Caveat 2 - Download ncbiRefSeqHgmd from UCSC
 wget https://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/ncbiRefSeqHgmd.txt.gz
@@ -41,7 +42,7 @@ dotnet $ICA_BIN_DIR/Nirvana.dll --cache $ICA_DATA_DIR/Cache --sd $ICA_DATA_DIR/S
 python3 $SCRIPTS_DIR/generate_pathogenic_aa_list.py clean_clinvar_ica.json.gz clean_clinvar.vcf hg19_clinvar_pathogenic_aa.tsv
 
 # PS3 - Download avada big bed file and convert it to bed format
-wget http://hgdownload.soe.ucsc.edu/gbdb/hg37/bbi/avada.bb
+wget http://hgdownload.soe.ucsc.edu/gbdb/hg19/bbi/avada.bb
 wget https://hgdownload.soe.ucsc.edu/admin/exe/macOSX.x86_64/bigBedToBed
 chmod +x bigBedToBed
 ./bigBedToBed avada.bb avada.bed
@@ -52,6 +53,7 @@ python3 $SCRIPTS_DIR/extract_from_avada_track.py avada.bed hg19_literature_suppo
 # PS4 - Download GWAS catalog
 wget https://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/gwasCatalog.txt.gz
 gunzip gwasCatalog.txt.gz
+mv gwasCatalog.txt hg19GwasCatalog.txt
 
 ################### PM ######################
 
@@ -78,5 +80,19 @@ python3 $SCRIPTS_DIR/join_coding_and_repeats.py --inRepeatFile rmsk.txt --inCons
 # PP2 & BP1 - Find missense pathogenic genes
 python3 $SCRIPTS_DIR/find_missense_pathogenic_genes.py clinvar.vcf hg19_missense_pathogenic_genes.tsv hg19_truncating_genes.tsv
 
-echo "Setup complete."
+# Create output JSON file with absolute paths
+cat << EOF > $OUTPUT_DIR/hg19_required_paths.json
+{
+    "lof_gene_fp": "$OUTPUT_DIR/hg19_lof_genes.tsv",
+    "ncbi_ref_seq_hgmd_fp": "$OUTPUT_DIR/hg19_ncbiRefSeqHgmd.tsv",
+    "clinvar_pathogenic_aa_fp": "$OUTPUT_DIR/hg19_clinvar_pathogenic_aa.tsv",
+    "gwas_dbsnp_fp": "$OUTPUT_DIR/hg19GwasCatalog.txt",
+    "coding_repeat_region_fp": "$OUTPUT_DIR/hg19_coding_repeat_regions.tsv",
+    "missense_pathogenic_genes_fp": "$OUTPUT_DIR/hg19_missense_pathogenic_genes.tsv",
+    "truncating_genes_fp": "$OUTPUT_DIR/hg19_truncating_genes.tsv",
+    "pathogenic_domains_fp": "$OUTPUT_DIR/hg19_pathogenic_domains.tsv",
+    "literature_supported_variants_fp": "$OUTPUT_DIR/hg19_literature_supported_variants.tsv"
+}
+EOF
 
+echo "Setup complete. Output written to $OUTPUT_DIR/hg19_required_paths.json."

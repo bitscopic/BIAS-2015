@@ -142,13 +142,13 @@ def parse_nirvana_json(inJson, inVcf, output_file):
                     v_index = (var.chromosome, var.position, var.refAllele, var.altAllele) 
                     rs_id, criteria, signif = clinvar_var_to_data.get(v_index, ("", "", ""))
                     # Don't process intergenic pathogenic variants - they won't have any AA change associated with them
-                    if var.geneName == 'intergenic': continue
-
+                    if var.geneName == 'n/a': continue
                     # The variant does not have one review status with a score > 1 (see scoring table)
                     if clinvar_review_status_to_level.get(criteria.lower().replace("_", " "), 0) < 2: continue
 
                     # There is not an aa change associated with this variant
                     if var.protein_variant == "n/a": continue
+                    print(var.geneName)
                     values = [
                             var.geneName,
                             var.protein_variant,
