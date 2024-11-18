@@ -9,9 +9,9 @@ See doc/variant_interpretation.txt for generating the required data files. Once 
 config/requiredPaths.json to reflect the appropriate paths on your machine.
 
 Alternatively, our version of the required data files can be downloaded here
-https://github.com/bitscopic/BIAS-2015-data
+[https://github.com/bitscopic/BIAS-2015-data](https://drive.google.com/drive/folders/1_8Y8uC2H_y2XmY0i9u5g5mkcc00NE3NA?usp=sharing)
 
-Users will need the files in preprocessing_data/bias_2015_required_files/
+Users will need the files for their respective genome build.
 
 BIAS-2015 exclusively uses Python3 standard libraries, you should not need to install any other dependencies.
 
@@ -20,7 +20,7 @@ To run the pipeline on a VCF file, you will first need to annotate it with Illum
 ICA (formerly Nirvana) is a dotnet software package that is free to Download online here
     https://support.illumina.com/downloads/illumina-connected-annotations.html
 
-BIAS-2015 currently supports hg19/GRCh37 classifications, as such you must annotate with the ICA hg19/GRCh37 dataset.
+BIAS-2015 currently supports hg19/GRCh37 and hg38/GRCh38 classifications, as such you must annotate with either the ICA hg19/GRCh37 or hg38/GRCh37 dataset.
 
 ```
 mkdir data
