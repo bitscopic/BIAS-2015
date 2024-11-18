@@ -9,7 +9,7 @@ See doc/variant_interpretation.txt for generating the required data files. Once 
 config/requiredPaths.json to reflect the appropriate paths on your machine.
 
 Alternatively, our version of the required data files can be downloaded here
-[https://github.com/bitscopic/BIAS-2015-data](https://drive.google.com/drive/folders/1_8Y8uC2H_y2XmY0i9u5g5mkcc00NE3NA?usp=sharing)
+[BIAS-2015-data](https://drive.google.com/drive/folders/1_8Y8uC2H_y2XmY0i9u5g5mkcc00NE3NA?usp=sharing)
 
 Users will need the files for their respective genome build.
 
