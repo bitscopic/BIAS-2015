@@ -1,11 +1,11 @@
 {
-    "lof_gene_fp": "./config/hg19_lof_genes.tsv",
-    "ncbi_ref_seq_hgmd_fp": "./config/hg19_ncbiRefSeqHgmd.tsv",
-    "clinvar_pathogenic_aa_fp": "./config/hg19_clinvar_pathogenic_aa.tsv",
-    "gwas_dbsnp_fp": "./config/gwasCatalog.txt",
-    "coding_repeat_region_fp": "./config/hg19_coding_repeat_regions.tsv",
-    "missense_pathogenic_genes_fp": "./config/hg19_missense_pathogenic_genes.tsv",
-    "truncating_genes_fp": "./config/hg19_truncating_genes.tsv",
-    "pathogenic_domains_fp": "./config/hg19_pathogenic_domains.tsv",
-    "literature_supported_variants_fp": "./config/hg19_literature_supported_variants.tsv"
+    "lof_gene_fp": "/Users/ceisenhart/Bioinformatics/bitscopic_repos/bias-2015/hg19/hg19_lof_genes.tsv",
+    "ncbi_ref_seq_hgmd_fp": "/Users/ceisenhart/Bioinformatics/public_repos/BIAS-2015-data/preprocessing_data/hg19/bias_2015_required_files/hg19_ncbiRefSeqHgmd.tsv",
+    "clinvar_pathogenic_aa_fp": "/Users/ceisenhart/Bioinformatics/public_repos/BIAS-2015-data/preprocessing_data/hg19/bias_2015_required_files/hg19_clinvar_pathogenic_aa.tsv",
+    "gwas_dbsnp_fp": "/Users/ceisenhart/Bioinformatics/public_repos/BIAS-2015-data/preprocessing_data/hg19/bias_2015_required_files/gwasCatalog.txt",
+    "coding_repeat_region_fp": "/Users/ceisenhart/Bioinformatics/public_repos/BIAS-2015-data/preprocessing_data/hg19/bias_2015_required_files/hg19_coding_repeat_regions.tsv",
+    "missense_pathogenic_genes_fp": "/Users/ceisenhart/Bioinformatics/public_repos/BIAS-2015-data/preprocessing_data/hg19/bias_2015_required_files/hg19_missense_pathogenic_genes.tsv",
+    "truncating_genes_fp": "/Users/ceisenhart/Bioinformatics/public_repos/BIAS-2015-data/preprocessing_data/hg19/bias_2015_required_files/hg19_truncating_genes.tsv",
+    "pathogenic_domains_fp": "/Users/ceisenhart/Bioinformatics/public_repos/BIAS-2015-data/preprocessing_data/hg19/bias_2015_required_files/hg19_pathogenic_domains.tsv",
+    "literature_supported_variants_fp": "/Users/ceisenhart/Bioinformatics/public_repos/BIAS-2015-data/preprocessing_data/hg19/bias_2015_required_files/hg19_literature_supported_variants.tsv"
 }

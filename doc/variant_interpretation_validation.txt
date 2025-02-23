@@ -1,27 +1,36 @@
-# The steps taken to evaluate and validate the performance of the BIAS software
+# The steps taken to evaluate and validate the performance of the BIAS software. These steps can be re ran, or the
+# validation data generated and used for the paper can be downloaded from our S3 bucket here
+
+aws s3 ls s3://bias-2015/
+
+# first install the libraries listed in validation_requirements.txt
+pip3 install validation_requirements.txt
 
 # Download the Erepo dataset by going to this website
 # https://erepo.clinicalgenome.org/evrepo/
-# and clicking the download button then downloading the tsv as erepo.tabbed.txt
+# and clicking the download button then downloading the tsv as erepo-tabbed.tsv
 
-# Go to the scripts directory for the next steps as some of the scripts have peculiar pathing requirements
-cd src/scripts
+# Download the reference genome and gunzip it
+wget https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz
+gunzip hg19.fa 
 
-# Run the python script to convert the erepo data into an hg19 vcf file
-python erepo_to_vcf.py
+# Create the validation vcf file
+python3 src/scripts/erepo_to_vcf.py -i ~/Downloads/erepo-tabbed.tsv -r hg19.fa -H src/scripts/vcf_header.txt -o erepo_validation.vcf -R hg19
 
-# Sort the vcf file
-bcftools sort output.vcf -o sorted_output.vcf
+# Run Nirvana
+dotnet ~/bin/Nirvana-v3.18.1/Nirvana.dll --cache ~/data/GRCh37/Cache/GRCh37/Both --sd ~/data/GRCh37/SupplementaryAnnotation/GRCh37/ --ref ~/data/GRCh37/References/Homo_sapiens.GRCh37.Nirvana.dat --in erepo_feb_2nd_sorted.vcf --o erepo_feb_2_nirv.json.gz
 
-# You will need to download and install Illumina Connected Annotations,
-# https://developer.illumina.com/illumina-connected-annotations
-# NOTE: This requires an Illumina account, you must also download the hg19 ICA/Nirvana reference files 
+# Run BIAS
+python3 bias-2015.py erepo_validati.json.gz hg19_required_paths.json erepo_feb_2nd_bitscopic_classifications.tsv --verbose=DEBUG
 
-# Run Illumina Connected Annotations
-dotnet ~/Bioinformatics/bin/IlluminaConnectedAnnotations/Nirvana.dll --cache ~/Bioinformatics/data/ICA/Cache --sd ~/Bioinformatics/data/SupplementaryAnnotation/GRCh37 --ref ~/Bioinformatics/data/ICA/References/Homo_sapiens.GRCh37.Nirvana.dat --in sorted_output.vcf -o erepo_nirvana
+# Calculate the BIAS performance
+python3 src/scripts/evaluate_bias_erepo_validation.py erepo_feb_2nd.tabbed erepo_feb_2nd_bitscopic_classifications.tsv erepo_feb_2nd_sorted.vcf bias --conc bias_conc.tsv --sens bias_sense_spec.tsv --full bias_full_codes.tsv
 
-# Run the bitscopic interpreting ACMG standards (BIAS) software to classify the erepo data 
-python ../../bias-2015.py erepo_nirvana.json.gz ../../config/requiredPaths.json erepo_bitscopic_classifications.tsv
+# NOTE: Users must run Annovar and Intervar - please see their respective documentations!
+# Calculate the INTERVAR performance
+python3 src/scripts/evaluate_bias_erepo_validation.py erepo_feb_2nd.tabbed erepo_feb_2nd.hg19_multianno.txt.intervar erepo_feb_2nd_sorted.vcf intervar --conc intervar_conc.tsv --sens_spec intervar_sense_spec.tsv --full intervar_full_codes.tsv
 
-# Compare the bitscopic classifications to the erepo classifications and calculate sensitivity and specificity
-python evaluate_bias_erepo_validation.py erepo.tabbed.txt erepo_bitscopic_classifications.tsv sorted_output.vcf
+# Generate figures and tables used in the paper
+python3 src/scripts/create_acmg_and_f1_plots.py bias_conc.tsv intervar_conc.tsv bias_2015_v2.0.0_code_counts.png bias_2015_v2.0.0_f1.png
+python asrc/scripts/generate_latex_table.py bias_sense_spec.tsv intervar_sense_spec.tsv performance_table.tex
+python3 src/scripts/make_bias_tables.py bias_conc.tsv intervar_conc.tsv supplementary_table.tsv supplementary_table.png

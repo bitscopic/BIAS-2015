@@ -5,9 +5,15 @@ Extract information from a variant line from the ICA/NIRVANA output
 
 Each variant is stored in a VariantData class
 
-
+The input file is streamed through as recommended by the NIRVANA team, each line is read and parsed individually
 """
 import json 
+import logging
+import sys
+import gzip
+import os
+import io
+from src.bias_2015.constants import clinvar_review_status_to_level
 
 class VariantData:
     """
@@ -44,6 +50,11 @@ class VariantData:
         self.gerp = ""
         self.dann = ""
         self.revel = ""
+        self.topmed = {}
+        self.phylopScore = ""
+        self.clingen_gene_validity = []
+        self.gene_gnomad = {}
+        self.clinvar_id = ""
 
     def to_json(self):
         """
@@ -116,6 +127,51 @@ class VariantData:
             self.transcript,
             json.dumps(self.justification)])
 
+    def __str__(self):
+        return f"{self.chromosome}-{self.position}-{self.refAllele}-{self.altAllele}"
+
+def open_file(file_path, mode):
+    """
+    Open either a normal or a .gz file
+    """
+    _, file_extension = os.path.splitext(file_path)
+    if file_extension == ".gz":
+        return gzip.open(file_path, mode)
+    return io.open(file_path, mode, encoding="utf-8")
+
+def load_nirvana_gene_information(nirvana_json_file):
+    """
+    NIRVANA gene information extraction with error handling.
+
+    NIRVANA puts gene information at the end of the .json file, so you have to go through the
+    file once to have it on hand for each variant
+    """
+    hgnc_to_gene_data = {}
+    try:
+        with open_file(nirvana_json_file, "rt") as f:
+            _ = f.readline()[10:-15]
+            genes_section = False
+            for line in f:
+                # Check if we have reached the end of the genes section
+                if genes_section:
+                    if line.strip() == "]}," or line.strip() == "]}":
+                        break
+                    try:
+                        # Extract gene information
+                        data = json.loads(line[:-2] if line[-2] == "," else line)
+                        hgnc_id = data["name"]
+                        hgnc_to_gene_data[hgnc_id] = data
+                    except json.JSONDecodeError as e:
+                        logging.error("Malformed JSON in line: %s. Error: %s", line.strip(), e)
+                        continue
+                # Check if we have reached the start of the genes section
+                if '"genes":[' in line:
+                    genes_section = True
+    except Exception as e:
+        logging.critical("Failed to load Nirvana gene information from file: %s. Error: %s", nirvana_json_file, e)
+        sys.exit(1)
+    return hgnc_to_gene_data
+
 
 def rank_clinvar_entries(entries):
     """
@@ -152,7 +208,7 @@ def rank_clinvar_entries(entries):
     # Iterate through each entry and assign a rank score based on the criteria
     for entry in entries:
         # Initialize the rank score for the current entry
-        rank_scores[entry["id"]] = 0
+        rank_scores[entry["id"]] = clinvar_review_status_to_level.get(entry["reviewStatus"], 0)
 
         # Increase rank score if the classification is likely pathogenic
         if "likely pathogenic" in entry["significance"]:
@@ -162,17 +218,9 @@ def rank_clinvar_entries(entries):
         if "pathogenic" in entry["significance"]:
             rank_scores[entry["id"]] += 2
 
-        # Increase rank score if there are multiple submitters
-        if "multiple submitters" in entry["reviewStatus"]:
-            rank_scores[entry["id"]] += 1
-
         # Increase rank score if there are supporting PubMed IDs
         if "pubMedIds" in entry and entry["pubMedIds"]:
             rank_scores[entry["id"]] += len(entry["pubMedIds"])
-
-        # Increase rank score if the entry has been reviewed by ClinVar's Expert Panel
-        if "Expert Panel" in entry["reviewStatus"]:
-            rank_scores[entry["id"]] += 1
 
         # Increase rank score based on the number of phenotypes associated with the variant
         if "phenotypes" in entry and len(entry["phenotypes"]) > 0:
@@ -234,7 +282,13 @@ def identify_clinvar_information(clin_var_list, ref_allele, alt_allele):
     """
     # Go through the clinvar elements and remove variants that dont have the same ref and alt allele as the observed variant
     clean_clinvar_list = []
+    clinvar_id = ""
     for clin_var in clin_var_list:
+        if 'VCV' in clin_var['id']:
+            clinvar_id = clin_var['id']
+        if clin_var.get('variationId'):
+            if 'VCV' in clin_var['variationId']:
+                clinvar_id = clin_var['variationId']
         # Only consider variants that share the same reference base and alt allele
         if clin_var.get("refAllele", "") != ref_allele or clin_var.get("altAllele", "") != alt_allele:
             continue
@@ -242,7 +296,7 @@ def identify_clinvar_information(clin_var_list, ref_allele, alt_allele):
 
     # Corner case where the none of the clinVar entries shared the same alt allele as current variant
     if not clean_clinvar_list:
-        return "", "", "", ""
+        return "", "", "", "", clinvar_id
 
     # Identify the best clinvar entry using a ranking schema
     best_clin_var_entry = rank_clinvar_entries(clean_clinvar_list)[0]
@@ -268,7 +322,7 @@ def identify_clinvar_information(clin_var_list, ref_allele, alt_allele):
 
     # Supporting evidence level
     review_status = best_clin_var_entry.get("reviewStatus", "")
-    return variant_id, significance, pubmed_joined_ids, review_status
+    return variant_id, significance, pubmed_joined_ids, review_status, clinvar_id
 
 
 def process_transcript(transcript, hgnc_to_gene_data):
@@ -300,11 +354,10 @@ def process_transcript(transcript, hgnc_to_gene_data):
     # Verify that gene data was reported by Nirvana for this gene
     gene_data = hgnc_to_gene_data.get(gene_name)
     if not gene_data:
-        return "", gene_name, consequence
+        return "", gene_name, consequence, []
 
     # The gene data must include clingenGeneValidity
     clingen_gene_validity = gene_data.get("clingenGeneValidity")
-
     # Gather the unique diseases seen in the clingenGeneValidity data
     clingen_associated_disease = set()
     if clingen_gene_validity:
@@ -315,7 +368,7 @@ def process_transcript(transcript, hgnc_to_gene_data):
     # Format for simplicity
     gene_associated_disease = sorted(list(clingen_associated_disease))
 
-    return gene_associated_disease, gene_name, consequence
+    return gene_associated_disease, gene_name, consequence, clingen_gene_validity
 
 
 def convert_mutation_format(mutation_str):
@@ -370,7 +423,6 @@ def convert_mutation_format(mutation_str):
     return converted_str
 
 
-
 def rank_transcript_entries(transcript_list, hgnc_to_gene_data, transcript_database):
     """
     Identifies the ideal transcript from a list of transcripts based on predefined criteria.
@@ -385,42 +437,52 @@ def rank_transcript_entries(transcript_list, hgnc_to_gene_data, transcript_datab
 
     Criteria:
     - Is Canonical: Transcripts flagged as canonical are ranked higher.
+    - Protein-Coding: Transcripts with bioType "mRNA" are ranked higher.
+    - Has Coding Sequence Information: Transcripts with "cdsPos" or "proteinPos" are ranked higher.
     - Transcript Database: Transcripts from the specified transcript database are ranked higher.
     - HGNC Data: Transcripts with available HGNC data are ranked higher.
-
-    Note:
-    - This function assumes that the provided transcript_list contains the necessary fields.
-    - The function calculates rank scores based on the defined criteria and returns a new list of transcripts sorted in descending order based on the rank scores.
 
     Example:
     >>> transcript_list = [{'transcript': 'ENST000001', 'isCanonical': True, 'source': 'Ensembl', 'hgnc': 'GENE1'}, {...}, ...]
     >>> hgnc_to_gene_data = {'GENE1': {...}, ...}
     >>> transcript_database = 'Ensembl'
-    >>> sorted_transcripts = identify_ideal_transcript(transcript_list, hgnc_to_gene_data, transcript_database)
+    >>> sorted_transcripts = rank_transcript_entries(transcript_list, hgnc_to_gene_data, transcript_database)
     """
     # Initialize a dictionary to store the rank scores for each entry
     rank_scores = {}
 
     # Iterate through each entry and assign a rank score based on the criteria
     for entry in transcript_list:
-        # Initialize the rank score for the current entry
-        rank_scores[entry["transcript"]] = 0
+        transcript_id = entry["transcript"]
+        rank_scores[transcript_id] = 0
 
-        # Increase rank score if the transcript is cannonical
+        # Increase rank for canonical transcripts
         if entry.get("isCanonical"):
-            rank_scores[entry["transcript"]] += 1
+            rank_scores[transcript_id] += 3  # High priority
 
+        # Prioritize protein-coding transcripts
+        if entry.get("bioType") == "mRNA":
+            rank_scores[transcript_id] += 2  # Medium priority
+
+        # Prioritize transcripts with coding sequence information
+        if "cdsPos" in entry or "proteinPos" in entry:
+            rank_scores[transcript_id] += 2  # Medium priority
+
+        # Increase rank if the transcript source matches the specified database
         if entry.get("source") in transcript_database:
-            rank_scores[entry["transcript"]] += 1
+            rank_scores[transcript_id] += 1
 
-        if entry.get("hgnc") in hgnc_to_gene_data.keys():
-            rank_scores[entry["transcript"]] += 1
+        # Increase rank if the transcript has HGNC mapping
+        if entry.get("hgnc") in hgnc_to_gene_data:
+            rank_scores[transcript_id] += 1
+
     # Sort the entries based on their rank scores (in descending order)
     sorted_entries = sorted(transcript_list, key=lambda e: rank_scores[e["transcript"]], reverse=True)
     return sorted_entries
 
 
-def process_variant(variant, hgnc_to_gene_data, transcript_database, chrom, position):
+
+def process_variant(variant, hgnc_to_gene_data, transcript_database, chrom, position, ref, alt):
     """
     Processes a variant from a Nirvana JSON file and extracts relevant information.
 
@@ -438,8 +500,15 @@ def process_variant(variant, hgnc_to_gene_data, transcript_database, chrom, posi
     Raises:
         "".
     """
+    # This sadly isnt standardized! Some ommit the chr, others require it. We ensure it is always there. 
+    if not chrom.startswith("chr"):
+        chrom = f"chr{chrom}"
+    
     # Assign essential variant elements
-    single_variant = VariantData(chrom, position, variant["refAllele"], variant["altAllele"], variant["variantType"])
+    single_variant = VariantData(chrom, position, ref, alt, variant["variantType"])
+
+    if variant.get("phylopScore"):
+        single_variant.phylopScore = variant["phylopScore"]
 
     # Grab the hgvsg name if it is present
     single_variant.hgvsg = variant.get("hgvsg", "")
@@ -451,9 +520,13 @@ def process_variant(variant, hgnc_to_gene_data, transcript_database, chrom, posi
 
     if variant.get("gnomad"):
         single_variant.gnomad = variant.get("gnomad")
+    else:
+        single_variant.gnomad = {}
 
     if variant.get("oneKg"):
         single_variant.oneKg = variant['oneKg']
+    else:
+        single_variant.oneKg = {}
 
     if variant.get("revel"):
         single_variant.revel = variant['revel']['score']
@@ -466,12 +539,13 @@ def process_variant(variant, hgnc_to_gene_data, transcript_database, chrom, posi
 
     # Gather the relevant clinvar information for this variant
     if variant.get("clinvar"):
-        variant_id, significance, pubmed_joined_ids, review_status = \
+        variant_id, significance, pubmed_joined_ids, review_status, clinvar_id = \
                 identify_clinvar_information(variant["clinvar"], single_variant.refAllele, single_variant.altAllele)
         single_variant.variantId = variant_id
         single_variant.pubmedIds = pubmed_joined_ids
         single_variant.clinvar_significance = significance
         single_variant.clinvar_review_status = review_status
+        single_variant.clinvar_id = clinvar_id
 
     # Harvest transcript specific information
     transcript_list = variant.get("transcripts")
@@ -488,13 +562,18 @@ def process_variant(variant, hgnc_to_gene_data, transcript_database, chrom, posi
             single_variant.hgvsp = best_transcript['hgvsp']
             single_variant.protein_variant = convert_mutation_format(best_transcript['hgvsp'])
        
-        gene_associated_disease, gene_name, consequence = process_transcript(
+        gene_associated_disease, gene_name, consequence, clingen_gene_validity = process_transcript(
             best_transcript, hgnc_to_gene_data
         )
         single_variant.geneName = gene_name
         single_variant.geneAssociatedDisease = gene_associated_disease
         single_variant.consequence = consequence
-
+        single_variant.clingen_gene_validity = clingen_gene_validity
+        if hgnc_to_gene_data.get(gene_name):
+            if hgnc_to_gene_data[gene_name].get('gnomAD'): 
+                single_variant.gene_gnomad = hgnc_to_gene_data[gene_name]['gnomAD']
+        if variant.get("topmed"):
+            single_variant.topmed = variant['topmed']
     return single_variant
 
 

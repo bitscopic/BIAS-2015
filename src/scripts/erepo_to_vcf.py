@@ -4,54 +4,150 @@ Converts Erepo ACMG curated variant information in tsv format to hg19 DRAGEN vcf
 Erepo
 https://erepo.clinicalgenome.org/evrepo/
 
+Requires a reference genome fasta (hg19.fa or hg38.fa)
 """
-import pysam
+import argparse
+from datetime import datetime
+from pysam import FastaFile 
 
-def get_dna_sequence(chrom, start, end):
+# GenBank and RefSeq accessions from 
+# https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_000001405.40/
+ref_to_accessions = {
+    'hg19': {
+        "CM000663.2": "chr1", "NC_000001.11": "chr1",
+        "CM000664.2": "chr2", "NC_000002.12": "chr2",
+        "CM000665.2": "chr3", "NC_000003.12": "chr3",
+        "CM000666.2": "chr4", "NC_000004.12": "chr4",
+        "CM000667.2": "chr5", "NC_000005.10": "chr5",
+        "CM000668.2": "chr6", "NC_000006.12": "chr6",
+        "CM000669.2": "chr7", "NC_000007.14": "chr7",
+        "CM000670.2": "chr8", "NC_000008.11": "chr8",
+        "CM000671.2": "chr9", "NC_000009.12": "chr9",
+        "CM000672.2": "chr10", "NC_000010.11": "chr10",
+        "CM000673.2": "chr11", "NC_000011.10": "chr11",
+        "CM000674.2": "chr12", "NC_000012.12": "chr12",
+        "CM000675.2": "chr13", "NC_000013.11": "chr13",
+        "CM000676.2": "chr14", "NC_000014.9": "chr14",
+        "CM000677.2": "chr15", "NC_000015.10": "chr15",
+        "CM000678.2": "chr16", "NC_000016.10": "chr16",
+        "CM000679.2": "chr17", "NC_000017.11": "chr17",
+        "CM000680.2": "chr18", "NC_000018.10": "chr18",
+        "CM000681.2": "chr19", "NC_000019.10": "chr19",
+        "CM000682.2": "chr20", "NC_000020.11": "chr20",
+        "CM000683.2": "chr21", "NC_000021.9": "chr21",
+        "CM000684.2": "chr22", "NC_000022.11": "chr22",
+        "CM000685.2": "chrX", "NC_000023.11": "chrX",
+        "CM000686.2": "chrY", "NC_000024.10": "chrY",
+    },
+    'hg38': {
+        "CM000663.2": "chr1", "NC_000001.11": "chr1",
+        "CM000664.2": "chr2", "NC_000002.12": "chr2",
+        "CM000665.2": "chr3", "NC_000003.12": "chr3",
+        "CM000666.2": "chr4", "NC_000004.12": "chr4",
+        "CM000667.2": "chr5", "NC_000005.10": "chr5",
+        "CM000668.2": "chr6", "NC_000006.12": "chr6",
+        "CM000669.2": "chr7", "NC_000007.14": "chr7",
+        "CM000670.2": "chr8", "NC_000008.11": "chr8",
+        "CM000671.2": "chr9", "NC_000009.12": "chr9",
+        "CM000672.2": "chr10", "NC_000010.11": "chr10",
+        "CM000673.2": "chr11", "NC_000011.10": "chr11",
+        "CM000674.2": "chr12", "NC_000012.12": "chr12",
+        "CM000675.2": "chr13", "NC_000013.11": "chr13",
+        "CM000676.2": "chr14", "NC_000014.9": "chr14",
+        "CM000677.2": "chr15", "NC_000015.10": "chr15",
+        "CM000678.2": "chr16", "NC_000016.10": "chr16",
+        "CM000679.2": "chr17", "NC_000017.11": "chr17",
+        "CM000680.2": "chr18", "NC_000018.10": "chr18",
+        "CM000681.2": "chr19", "NC_000019.10": "chr19",
+        "CM000682.2": "chr20", "NC_000020.11": "chr20",
+        "CM000683.2": "chr21", "NC_000021.9": "chr21",
+        "CM000684.2": "chr22", "NC_000022.11": "chr22",
+        "CM000685.2": "chrX", "NC_000023.11": "chrX",
+        "CM000686.2": "chrY", "NC_000024.10": "chrY",
+        }
+}
+
+def get_dna_sequence(reference_genome, chrom, start, end):
     """
     Return an hg19 dna sequence
     """
-    reference_genome = "/Users/ceisenhart/Bioinformatics/data/reference_genomes/hg19.fa"
-    # Open the reference genome file
-    fasta = pysam.FastaFile(reference_genome)
-
-    # Fetch the sequence
+    
+    fasta = FastaFile(reference_genome)
     sequence = fasta.fetch(chrom, start, end)
-
-    # Close the fasta file
     fasta.close()
-
     return sequence.upper()
 
-hg19_accessions = [
-    "NC_000001.10",  # Chromosome 1
-    "NC_000002.11",  # Chromosome 2
-    "NC_000003.11",  # Chromosome 3
-    "NC_000004.11",  # Chromosome 4
-    "NC_000005.9",   # Chromosome 5
-    "NC_000006.11",  # Chromosome 6
-    "NC_000007.13",  # Chromosome 7
-    "NC_000008.10",  # Chromosome 8
-    "NC_000009.11",  # Chromosome 9
-    "NC_000010.10",  # Chromosome 10
-    "NC_000011.9",   # Chromosome 11
-    "NC_000012.11",  # Chromosome 12
-    "NC_000013.10",  # Chromosome 13
-    "NC_000014.8",   # Chromosome 14
-    "NC_000015.9",   # Chromosome 15
-    "NC_000016.9",   # Chromosome 16
-    "NC_000017.10",  # Chromosome 17
-    "NC_000018.9",   # Chromosome 18
-    "NC_000019.9",   # Chromosome 19
-    "NC_000020.10",  # Chromosome 20
-    "NC_000021.8",   # Chromosome 21
-    "NC_000022.10",  # Chromosome 22
-    "NC_000023.10",  # Chromosome X
-    "NC_000024.9"    # Chromosome Y
-]
 
-def generate_vcf_data(erepo_filename, verbose = False):
+def is_before(date1, date2):
     """
+    Check if the first date is before the second date, handling both "YYYY-MM-DD" and "YYYY/M/D" formats.
+    """
+    formats = ["%Y-%m-%d", "%Y/%m/%d"]
+
+    def parse_date(date_str):
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_str, fmt)
+            except ValueError:
+                continue
+        raise ValueError(f"Invalid date format: {date_str}")
+
+    return parse_date(date1) < parse_date(date2)
+
+
+def extract_ref_alt_position_from_g_coords(gen_coords, chromosome, reference_genome, components):
+    """
+    Take in genomic coordinates  g.102917130T>C and determine the ref and alt.
+
+    Sometimes we need additional reference bases to accurately make the vcf, we use the reference genome 
+    to find them in these cases. 
+    """
+    snp_count, dup_count, delins_count, del_count, ins_count = 0, 0, 0, 0, 0
+    int_str = {str(i) for i in range(10)}
+    if "_" in gen_coords: 
+        position = "".join(c for c in gen_coords[2:].split("_")[0] if c in int_str)
+    else:
+        position = "".join(c for c in gen_coords[2:] if c in int_str)
+    ref, alt = ".", "."
+    if ">" in gen_coords:  # SNP and MNP
+        ref, alt = gen_coords[len(position) + 2:].split(">")
+        snp_count += 1
+    elif "dup" in gen_coords:  # Duplications
+        end_position = gen_coords[len(position) + 3:-3] or str(int(position) + 1)
+        position = int(position) - 1
+        if int(end_position) - position > 1:
+            ref = get_dna_sequence(reference_genome, chromosome, int(position) -1, int(end_position))
+            alt = ref[0] + ref[1:] * 2
+        else:
+            ref = get_dna_sequence(reference_genome, chromosome, int(position), int(end_position))
+            alt = ref[0]*2 + ref[1:]
+        dup_count += 1
+    elif "delins" in gen_coords:  # Insertion/Deletion combination
+        if "_" in gen_coords:
+            end_position, alt = components[1][len(position) + 3:].split("delins")
+        else:
+            end_position = str(int(position) + 1)
+            alt = gen_coords.split("delins")[1]
+        position = int(position) - 1
+        ref = get_dna_sequence(reference_genome, chromosome, position, int(end_position))
+        alt = ref[0] + alt
+        delins_count += 1
+    elif "del" in gen_coords:  # Deletions
+        end_position = gen_coords[len(position) + 3:-3] or str(int(position) + 1)
+        ref = get_dna_sequence(reference_genome, chromosome, int(position) - 1, int(end_position) + 1)
+        alt = ref[0]
+        del_count += 1
+    elif "ins" in gen_coords:  # Insertions
+        alt = gen_coords[len(position) + 3:].split("ins")[1]
+        ref = get_dna_sequence(reference_genome, chromosome, int(position), int(position) + 1)
+        alt = ref + alt
+        ins_count += 1
+    v_type = (snp_count, dup_count, delins_count, del_count, ins_count)
+    return position, ref, alt, v_type
+
+def generate_vcf_data(erepo_filename, reference_genome, cutoff_date, ref_b, verbose=False):
+    """
+    Generate VCF data from an Erepo TSV file.
 
     NC_000010.9:g.89680808G>A,
     NC_000010.9:g.89682800_89682802dup,
@@ -59,107 +155,99 @@ def generate_vcf_data(erepo_filename, verbose = False):
     NC_000010.9:g.89715049_89715051del,
     NC_000017.9:g.75696123_75696124insAGCGGGC,
     """
-    # List of chrom, pos, ref, alt
     vcf_data = []
+    snp_count, dup_count, delins_count, del_count, ins_count = 0, 0, 0, 0, 0
+    no_assembly_comp, past_cutoff_date = 0, 0
     with open(erepo_filename, 'r') as erepo_file:
-        next(erepo_file)  # Skip header line
-        int_str = [str(i) for i in range(10)]
         line_count = 0
+        erepo_file.readline()
         for line in erepo_file:
             line_count += 1
-            columns = line.split('\t')
-            no_hg19_coordinates = True
-            for gen_id in columns[3].split(" "):
-                if gen_id.startswith("NC_0000"):
-                    components = gen_id.strip(",").split(":")
-                    if "?" in gen_id: 
-                        continue # Ignore super strange ones
-                    if components[0] in hg19_accessions:
-                        # Go through the second half of the g. notation and get the first location. For SNP is is the only location
-                        no_hg19_coordinates = False
-                        position = ""
-                        end_position = ""
-                        for char in components[1][2:]:
-                            if char in int_str:
-                                position += char
-                            else:
-                                break
-                        chromosome = 'chr'+str(int(components[0].split(".")[0][7:]))
-                        if chromosome == "chr23":
-                            chromosome = "chrX"
-                        if chromosome == "chr24":
-                            chromosome = "chrY"
-                        ref, alt = ".", "."
-                        if ">" in components[1]: # SNP and MNP
-                            ref, alt = components[1][len(position) + 2:].split(">")
-                        elif "dup" in components[1]: # Duplications 
-                            end_position = components[1][len(position) + 3:-3]
-                            position = int(position) - 1
-                            if not end_position:
-                                end_position = int(position) + 1
-                            ref = get_dna_sequence(chromosome, int(position), int(end_position))
-                            alt = ref[0] + ref[1:] * 2
-                            if len(alt) == 1:
-                                alt = alt*2
-                        elif "delins" in components[1]: # Insertion/deletion combination
-                            if "_" in components[1]:
-                                end_position, alt = components[1][len(position) + 3:].split("delins")
-                            else:
-                                alt = components[1].split("delins")[1]
-                                end_position = int(position) + 1
-                            position = int(position) - 1
-                            ref = get_dna_sequence(chromosome, position, int(end_position))
-                            alt = ref[0] + alt
-                        elif "del" in components[1]: # Deletions
-                            end_position = components[1][len(position) + 3:-3]
-                            if not end_position:
-                                end_position = int(position) + 1
-                            ref = get_dna_sequence(chromosome, int(position) -1, int(end_position) + 1)
-                            alt = ref[0]
-                        elif "ins" in components[1]: # Insertions
-                            alt = components[1][len(position) + 3:].split("ins")[1]
-                            ref = get_dna_sequence(chromosome, int(position), int(position) + 1)
-                            alt = ref + alt
-                        position = str(position)
-                        vcf_data.append((chromosome, position, ref, alt, line_count))
-                        break 
-            if no_hg19_coordinates and verbose:
-                print(columns[3], line_count)
-    print(f"Wrote vcf entries for {len(vcf_data)} out of {line_count} total Erepo variants")
+            columns = line.strip().split('\t')
+            hgvs_expressions = columns[3].strip().split(",")
+            publish_date = columns[-4]
+            if not is_before(publish_date, cutoff_date):
+                past_cutoff_date += 1
+                continue
+            no_assembly_coordinates = True
+            for hgvs in hgvs_expressions: # ex NM_000277.2:c.1A>G or NC_000012.12:g.102917130T>C
+                if "?" in hgvs:
+                    continue  # Ignore strange ones
+                components = hgvs.strip(",").split(":") # The separate elements, ex NC_000012.12 and g.102917130T>C
+                if len(components) < 2: continue
+                reference_assembly = components[0] # NOTE These are chromosome specific!
+                gen_coords = components[1]
+                if reference_assembly in ref_to_accessions[ref_b]: # Only looking for standard hg19 chrosomes
+                    no_assembly_coordinates = False
+                    # The genomic coordinats ex g.102917130T>C start with 'g.'
+                    chromosome = ref_to_accessions[ref_b][reference_assembly]
+                    try:
+                        position, ref, alt, v_type = extract_ref_alt_position_from_g_coords(gen_coords, chromosome, reference_genome, components)
+                    except ValueError: # Complex variants that are difficult to accurately translate
+                        continue
+                    snp_count += v_type[0]
+                    dup_count += v_type[1]
+                    delins_count += v_type[2]
+                    del_count += v_type[3]
+                    ins_count += v_type[4]
+                    vcf_data.append((chromosome, str(position), ref, alt, line_count))
+                    break # Only one entry per variant
+            if no_assembly_coordinates:
+                no_assembly_comp += 1
+                if verbose:
+                    print(line, line_count)
+    print(f"Skipped {past_cutoff_date} variants that were submitted past the cutoff date {cutoff_date}")
+    print(f"Skipped {no_assembly_comp} variants where {ref} genomic coordinates were not found")
+    print(f"Converted {snp_count} snp, {dup_count} dup, {delins_count} del-ins, {del_count} del, {ins_count} ins")
+    print(f"Wrote VCF entries for {len(vcf_data)} out of {line_count} total Erepo variants")
     return vcf_data
+
+def generate_vcf_entry(chrom, pos, ref, alt, line_count):
+    """
+    Format a VCF entry with ideal, high-quality variant calling values.
+    """
+    return (
+        f"{chrom}\t{pos}\t.\t{ref}\t{alt}\t.\tPASS\t"
+        f"DP=10000;MQ=60.00;FractionInformativeReads=1.000;AQ=100.00;"
+        f"GermlineStatus=Germline_DB;EreppoLine={line_count}\t"
+        f"GT:SQ:AD:AF:F1R2:F2R1:DP:SB:MB\t0/1:99.99:5000,5000:0.500:2500,2500:2500,2500:10000:5000,5000,5000,5000:5000,5000,5000,5000\n"
+    )
+
+def chrom_sort_key(variant):
+    """
+    Helper function for sorting the vcf
+    """
+    chrom_order = {str(i): i for i in range(1, 23)}
+    chrom_order.update({"X": 23, "Y": 24, "M": 25})  # Assigning numeric order to non-numeric chromosomes
+    chrom, pos = variant[0].lstrip("chr"), int(variant[1])
+    return (chrom_order.get(chrom, 26), pos)  # Default to 26 if an unexpected chromosome appears
 
 
 def main():
     """
-    Converting the erepo tsv file into a DRAGEN formated vcf file
+    Converting the erepo tsv file into a DRAGEN formatted vcf file
     """
-    # Generate VCF entries from the erepo file
-    erepo_filename = 'erepo.tabbed.txt'
-    vcf_data = generate_vcf_data(erepo_filename)
+    parser = argparse.ArgumentParser(description="Convert Erepo ACMG variant information to DRAGEN VCF format.")
+    parser.add_argument("-i", "--input", required=True, help="Path to the Erepo TSV file")
+    parser.add_argument("-o", "--output", required=True, help="Path to the output VCF file")
+    parser.add_argument("-r", "--reference_fasta", required=True, help="Path to the reference genome FASTA file (e.g., hg19.fa or hg38.fa)")
+    parser.add_argument("-H", "--header", required=True, help="Path to the VCF header file")
+    parser.add_argument("-R", "--ref_build", required= True, action="store", choices=['hg19', 'hg38'], help="Available ref builds")
+    parser.add_argument("-cd", "--cutoff_date", action="store", help="Provide a cutoff date")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose mode")
+    parser.set_defaults(cutoff_date = "2025-01-31")
+    parser.set_defaults(ref = 'hg19')
+    args = parser.parse_args()
 
-    def generate_vcf_entry(chrom, pos, ref, alt, line_count):
-        # Create a template for the VCF entry with placeholders for chrom, pos, ref, and alt
-        vcf_template = "{chrom}\t{pos}\t.\t{ref}\t{alt}\t.\tPASS\tDP=562;MQ=247.50;FractionInformativeReads=0.966;AQ=100.00" + \
-                        ";GermlineStatus=Germline_DB;EreppoLine={line_count}\tGT:SQ:AD:AF:F1R2:F2R1:DP:SB:MB\t0/1:11.80:434" + \
-                        ",109:0.201:209,56:225,53:543:226,208,51,58:217,217,48,61"
+    vcf_data = generate_vcf_data(args.input, args.reference_fasta, args.cutoff_date, args.ref_build, args.verbose)
+    sorted_vcf_data = sorted(vcf_data, key=chrom_sort_key)
+    with open(args.output, 'w') as vcf_file:
+        with open(args.header, 'r') as header_file:
+            vcf_file.writelines(header_file.readlines())
+        for entry in sorted_vcf_data:
+            vcf_file.write(generate_vcf_entry(entry[0], entry[1], entry[2], entry[3], entry[4]))
 
-        # Format the template with the provided chrom, pos, ref, and alt values
-        vcf_entry = vcf_template.format(chrom=chrom, pos=pos, ref=ref, alt=alt, line_count=line_count)
-        
-        return vcf_entry
+    print(f"VCF entries have been written to {args.output}")
 
-    # Output VCF entries
-    output_filename = 'output.vcf'
-    with open(output_filename, 'w') as vcf_file:
-        with open("vcf_header.txt", 'r') as in_file:
-            for line in in_file:
-                vcf_file.write(line)
-            for entry in vcf_data:
-                vcf_entry = generate_vcf_entry(entry[0], entry[1], entry[2], entry[3], entry[4])
-
-                vcf_file.write(vcf_entry + '\n')
-
-    print(f"VCF entries have been written to {output_filename}")
-
-if __name__ == "__main__" :
+if __name__ == "__main__":
     main()
