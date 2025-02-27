@@ -1,7 +1,7 @@
 # BIAS-2015 #
 Bitscopic Interpreting ACMG 2015 Standards
  
-This software is dual licensed. You may choose the AGPL license or [contact us](bill@bitscopic.com) for a commercial license to fit your needs.
+This software is dual licensed. You may choose the AGPL license or [contact us](mailto:bill@bitscopic.com) for a commercial license to fit your needs.
 It is free for academic use.
 
 BIAS-2015 also has a graphical user interface [BIAS-2015-ui](https://github.com/bitscopic/BIAS-2015-ui) available to
