@@ -105,7 +105,7 @@ A Nirvana .json output can be passed through BIAS-2015 with the following comman
 NOTE - users must download or generate the BIAS-data and have a valid required_paths.json file before running BIAS! 
 
 ```
-python bias-2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv
+python bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv
 ```
 
 If you downloaded the bias_v2.0.0_hg19_data_files.zip dataset, and correctly generated a required paths json, then
@@ -122,7 +122,7 @@ which simplifies viewing and manually updating results.
 ### Providing User Classifications ###
 To include your own classifiers, please provide the optional --user_classifiers flag
 ```
-python bias-2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv --user_classifiers my_classifiers.tsv
+python bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv --user_classifiers my_classifiers.tsv
 ```
 
 Classifier files are the same format as BIAS-2015 output. If you have many variants need to be updated, or you wish to update
@@ -135,12 +135,12 @@ file.
 
 Example
 ```
-python bias-2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv
+python bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv
 mv test_output.tsv my_classifiers.tsv
 ```
 Either manually or programmatically update my_classifiers.tsv to include your own ACMG classifiers. Then re run
 ```
-python bias-2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv --user_classifiers my_classifiers.tsv
+python bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv --user_classifiers my_classifiers.tsv
 ```
 
 ## Who do I talk to? ##
