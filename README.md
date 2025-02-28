@@ -77,7 +77,7 @@ they can generate a required_paths.json file by running the provided helper scri
 
 ```
 unzip bias_v2.0.0_hg19_data_files.zip
-python3 bsrc/scripts/create_new_required_paths_file.py bias_v2.0.0_hg19_data_files hg19 hg19_required_paths.json
+python3 src/scripts/create_new_required_paths_file.py bias_v2.0.0_hg19_data_files hg19 hg19_required_paths.json
 ```
 
 Alternatively, users can generate their own BIAS data files by running the preprocessing locally.  The entire preprocessing
