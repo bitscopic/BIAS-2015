@@ -1,7 +1,7 @@
 """
 BIAS-2015 implementation of the ACMG 2015 germline pathogenic classifiers
 """
-from src.bias_2015.constants import clinvar_review_status_to_level, score_to_hum_readable, loeuf_thresholds, pathogenic_thresholds
+from .constants import clinvar_review_status_to_level, score_to_hum_readable, loeuf_thresholds, pathogenic_thresholds
 
 def get_pvs(variant, gene_name_to_3prime_region, chrom_to_pos_to_alt_to_splice_score, skip_list):
     """

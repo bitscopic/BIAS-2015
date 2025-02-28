@@ -1,7 +1,7 @@
 """
 BIAS-2015 implementation of the ACMG 2015 germline benign classifiers
 """
-from src.bias_2015.constants import clinvar_review_status_to_level, score_to_hum_readable, loeuf_thresholds, benign_thresholds
+from .constants import clinvar_review_status_to_level, score_to_hum_readable, loeuf_thresholds, benign_thresholds
 
 def get_ba1(variant):
     """
