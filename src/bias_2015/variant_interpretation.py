@@ -3,7 +3,7 @@ Implementing the guidelines set forth in https://www.ncbi.nlm.nih.gov/pmc/articl
 ACMG/AMG 2015 interpretation guidelines. For each variant as many factors will be used as possible.
 '''
 
-from src.bias_2015 import benign_classifiers, pathogenic_classifiers
+from . import benign_classifiers, pathogenic_classifiers
 
 def calc_pathogenic(pvs, ps, pm, pp):
     """

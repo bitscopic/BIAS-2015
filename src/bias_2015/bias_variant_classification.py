@@ -2,8 +2,8 @@
 Implementing the guidelines set forth in https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4544753/
 ACMG/AMG 2015 interpretation guidelines. For each variant as many factors will be used as possible.
 '''
-from src.bias_2015 import benign_classifiers, pathogenic_classifiers
-from src.bias_2015.constants import high_uncertain_threshold, low_uncertain_threshold 
+from . import benign_classifiers, pathogenic_classifiers
+from .constants import high_uncertain_threshold, low_uncertain_threshold 
 
 def calc_pathogenic(pa, pvs, ps, pm, pp):
     """
