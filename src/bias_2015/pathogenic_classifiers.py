@@ -239,7 +239,7 @@ def get_ps3(variant, lit_gene_mut_to_data, lit_variant_to_data):
     
     # Identify the unique pubmeds for this variant
     if variant_pubmed_set and gene_mut_pubmed_set:
-        unique_pubmed_ids = list(gene_mut_pubmed_set | variant_pubmed_set) 
+        unique_pubmed_ids = sorted(list(gene_mut_pubmed_set | variant_pubmed_set))
     elif variant_pubmed_set:
         unique_pubmed_ids = sorted(list(variant_pubmed_set))
     else:
