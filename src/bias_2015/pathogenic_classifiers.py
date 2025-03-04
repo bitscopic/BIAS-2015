@@ -241,9 +241,9 @@ def get_ps3(variant, lit_gene_mut_to_data, lit_variant_to_data):
     if variant_pubmed_set and gene_mut_pubmed_set:
         unique_pubmed_ids = list(gene_mut_pubmed_set | variant_pubmed_set) 
     elif variant_pubmed_set:
-        unique_pubmed_ids = list(variant_pubmed_set)
+        unique_pubmed_ids = sorted(list(variant_pubmed_set))
     else:
-        unique_pubmed_ids = list(gene_mut_pubmed_set)
+        unique_pubmed_ids = sorted(list(gene_mut_pubmed_set))
 
     if len(unique_pubmed_ids) > pathogenic_thresholds['ps3_supporting_articles']:
         score = 1
