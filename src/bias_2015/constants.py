@@ -57,6 +57,11 @@ benign_thresholds = {
     "bp3_in_frame_max_length": 60,     # Maximum in-frame length for BP3 (19 amino acids)
     "bp3_in_frame_strong_length": 15,  # Strong BP3 threshold (5 amino acids or less)
 
+    # The intial ACMG standards recommend using multiple lines of computational evidence. Other subsequent publications
+    # recommend using a single tool.  By default BIAS considers multiple tools, then applies a generic weighting across
+    # all tools used.  This can be overwritten below
+    "bp4_tools": ["phylop", "revel", "dann", "gerp", "absplice"],
+    "bp4_weighting": True,
     #Cutoff values were used from "Calibration of computational tools for missense variant pathogenicity
     #classification and ClinGen recommendations for PP3/BP4 criteria" - table 2
     # https://pmc.ncbi.nlm.nih.gov/articles/PMC9748256/pdf/main.pdf
@@ -141,6 +146,12 @@ pathogenic_thresholds = {
     "pp2_pathogenic_high": 0.85,
     "pp2_benign_low": 0.15,
 
+    # The intial ACMG standards recommend using multiple lines of computational evidence. Other subsequent publications
+    # recommend using a single tool.  By default BIAS considers multiple tools, then applies a generic weighting across
+    # all tools used.  This can be overwritten below
+    "pp3_tools": ["phylop", "revel", "absplice"],
+    "pp3_weighting": True,
+    
     # PP3 thresholds for computational predictions (PhyloP, REVEL, ABSplice)
     "pp3_phylop_moderate": 9.741,
     "pp3_phylop_supporting": 7.376,

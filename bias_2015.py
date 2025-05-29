@@ -133,7 +133,6 @@ def classify_variants(output_file, nirvana_json_file, name_to_dataset, variant_t
 
         logging.info("Processed %d total variants in %d genes", v_count, len(name_to_dataset['hgnc_to_gene_data']))
     except Exception as e:
-        raise
         logging.critical("Error during variant classification. Output file: %s. Error: %s", output_file, e)
         sys.exit(1)
 
