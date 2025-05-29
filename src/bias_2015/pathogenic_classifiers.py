@@ -857,57 +857,69 @@ def get_pp3(variant, chrom_to_pos_to_alt_to_splice_score):
     printout_text = []
     alg_to_score = {}
 
-    if variant.phylopScore:
-        if variant.phylopScore >= pathogenic_thresholds['pp3_phylop_supporting']:
-            phylop_weight = "supporting"
-            if variant.phylopScore >= pathogenic_thresholds['pp3_phylop_moderate']:
-                phylop_weight = "moderate"
-                alg_to_score['phylop'] = 2
-            else:
-                alg_to_score['phylop'] = 1
-            printout_text.append(f"{phylop_weight} phylop {variant.phylopScore}")
-
-    if variant.revel:
-        if variant.revel >= pathogenic_thresholds['pp3_revel_supporting']:
-            revel_weight = "supporting"
-            if variant.revel >= pathogenic_thresholds['pp3_revel_strong']: # Strong pathogenic 
-                alg_to_score['revel'] = 3
-                revel_weight = "strong"
-            elif variant.revel >= pathogenic_thresholds['pp3_revel_moderate']: # moderate
-                alg_to_score['revel'] = 2
-                revel_weight = "moderate"
-            else: # supporting
-                alg_to_score['revel'] = 1
-            printout_text.append(f"{revel_weight} revel {variant.revel}")
-
-    if 'splice' in variant.consequence: 
-        # Also consider bases that are predicted to have a strong impact on splicing
-        # Authors suggest .2 as a high end cutoff, .05 as a middle end, and .01 as a low https://github.com/gagneurlab/absplice?tab=readme-ov-file#output
-        splice_score = 0 # 0 indicates no impact on splicing.
-        if chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome):
-            if chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome).get(variant.position):
-                if chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome).get(variant.position).get(variant.altAllele):
-                    splice_score = chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome).get(variant.position).get(variant.altAllele)
-        if splice_score >= pathogenic_thresholds['pp3_absplice_strong']:
-            absplice_weight = "strong"
-            alg_to_score['absplice'] = 3
-            printout_text.append(f"{absplice_weight} ABSplice {splice_score}")
     
+    if "phylop" in pathogenic_thresholds['pp3_tools']:
+        if variant.phylopScore:
+            if variant.phylopScore >= pathogenic_thresholds['pp3_phylop_supporting']:
+                phylop_weight = "supporting"
+                if variant.phylopScore >= pathogenic_thresholds['pp3_phylop_moderate']:
+                    phylop_weight = "moderate"
+                    alg_to_score['phylop'] = 2
+                else:
+                    alg_to_score['phylop'] = 1
+                printout_text.append(f"{phylop_weight} phylop {variant.phylopScore}")
+
+    if "revel" in pathogenic_thresholds['pp3_tools']:
+        if variant.revel:
+            if variant.revel >= pathogenic_thresholds['pp3_revel_supporting']:
+                revel_weight = "supporting"
+                if variant.revel >= pathogenic_thresholds['pp3_revel_strong']: # Strong pathogenic 
+                    alg_to_score['revel'] = 3
+                    revel_weight = "strong"
+                elif variant.revel >= pathogenic_thresholds['pp3_revel_moderate']: # moderate
+                    alg_to_score['revel'] = 2
+                    revel_weight = "moderate"
+                else: # supporting
+                    alg_to_score['revel'] = 1
+                printout_text.append(f"{revel_weight} revel {variant.revel}")
+
+    if "absplice" in pathogenic_thresholds['pp3_tools']:
+        if 'splice' in variant.consequence: 
+            # Also consider bases that are predicted to have a strong impact on splicing
+            # Authors suggest .2 as a high end cutoff, .05 as a middle end, and .01 as a low https://github.com/gagneurlab/absplice?tab=readme-ov-file#output
+            splice_score = 0 # 0 indicates no impact on splicing.
+            if chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome):
+                if chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome).get(variant.position):
+                    if chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome).get(variant.position).get(variant.altAllele):
+                        splice_score = chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome).get(variant.position).get(variant.altAllele)
+            if splice_score >= pathogenic_thresholds['pp3_absplice_strong']:
+                absplice_weight = "strong"
+                alg_to_score['absplice'] = 3
+                printout_text.append(f"{absplice_weight} ABSplice {splice_score}")
+        
     if alg_to_score:
         formatted_printout_text = " | ".join(printout_text)
         lines_of_evidence = len(printout_text)
-        score = 0
-        best_score = 0
-        best_algs = []
-        # Identify the best score and its algorithm(s)
-        for alg, a_score in alg_to_score.items():
-            if a_score >= best_score:
-                best_algs.append(alg)
-                score = a_score
-        # If multiple classifiers agree on the same max score, increment by one
-        if len(best_algs) > 1:
-            score += 1
-        score = min(score, 3) # Do not weigh above strong
+        score = 0        
+        if pathogenic_thresholds['pp3_weighting']: 
+            # As per ACMG guidelines, only use one score - therefore average it and round down
+            # Floor division is used to round down because we want to be conservative, increasing specificity
+            best_score = 0
+            best_algs = []
+            # Identify the best score and its algorithm(s)
+            for alg, a_score in alg_to_score.items():
+                if a_score >= best_score:
+                    best_algs.append(alg)
+                    score = a_score
+            # If multiple classifiers agree on the same max score, increment by one
+            if len(best_algs) > 1:
+                score += 1
+            score = min(score, 3) # Do not weigh above strong
+        else:
+            total_score = 0
+            for score in alg_to_score.values():
+                total_score += score
+            score = int(total_score / len(alg_to_score))
         if score == 1:
             pp3 = f"PP3: {lines_of_evidence} line(s) of computational evidence support a pathogenic effect; {formatted_printout_text}"
         else:

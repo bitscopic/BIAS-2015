@@ -386,96 +386,109 @@ def get_bp4(variant, chrom_to_pos_to_alt_to_splice_score):
     printout_text = []
     alg_to_score = {}
 
-    if variant.phylopScore:
-        if variant.phylopScore >= benign_thresholds['bp4_phylop_path_cutoff']:
-            return score, bp4
-        if variant.phylopScore <= benign_thresholds['bp4_phylop_low']:
-            phylop_weight = "supporting"
-            if variant.phylopScore <= benign_thresholds['bp4_phylop_very_low']:
-                phylop_weight = "moderate"
-                alg_to_score['phylop'] = 2
-            else:
-                alg_to_score['phylop'] = 1
-            printout_text.append(f"{phylop_weight} phylop {variant.phylopScore}")
-    
-    if variant.revel: 
-        if variant.revel >= benign_thresholds['bp4_revel_path_cutoff']: # Strong pathogenic 
-            return score, bp4
-        if variant.revel <= benign_thresholds['bp4_revel_supporting']:
-            revel_weight = "supporting"
-            if variant.revel <= benign_thresholds['bp4_revel_very_strong']: # Very strong benign
-                alg_to_score['revel'] = 4
-                revel_weight = "very strong"
-            elif variant.revel <= benign_thresholds['bp4_revel_strong']: # strong
-                alg_to_score['revel'] = 3
-                revel_weight = "strong"
-            elif variant.revel <= benign_thresholds['bp4_revel_moderate']: # moderate
-                alg_to_score['revel'] = 2
-                revel_weight = "moderate"
-            else: # supporting
-                alg_to_score['revel'] = 1 
-            printout_text.append(f"{revel_weight} revel {variant.revel}")
+    if "phylop" in benign_thresholds['bp4_tools']:
+        if variant.phylopScore:
+            if variant.phylopScore >= benign_thresholds['bp4_phylop_path_cutoff']:
+                return score, bp4
+            if variant.phylopScore <= benign_thresholds['bp4_phylop_low']:
+                phylop_weight = "supporting"
+                if variant.phylopScore <= benign_thresholds['bp4_phylop_very_low']:
+                    phylop_weight = "moderate"
+                    alg_to_score['phylop'] = 2
+                else:
+                    alg_to_score['phylop'] = 1
+                printout_text.append(f"{phylop_weight} phylop {variant.phylopScore}")
+   
+    if "revel" in benign_thresholds['bp4_tools']:
+        if variant.revel: 
+            if variant.revel >= benign_thresholds['bp4_revel_path_cutoff']: # Strong pathogenic 
+                return score, bp4
+            if variant.revel <= benign_thresholds['bp4_revel_supporting']:
+                revel_weight = "supporting"
+                if variant.revel <= benign_thresholds['bp4_revel_very_strong']: # Very strong benign
+                    alg_to_score['revel'] = 4
+                    revel_weight = "very strong"
+                elif variant.revel <= benign_thresholds['bp4_revel_strong']: # strong
+                    alg_to_score['revel'] = 3
+                    revel_weight = "strong"
+                elif variant.revel <= benign_thresholds['bp4_revel_moderate']: # moderate
+                    alg_to_score['revel'] = 2
+                    revel_weight = "moderate"
+                else: # supporting
+                    alg_to_score['revel'] = 1 
+                printout_text.append(f"{revel_weight} revel {variant.revel}")
     
     # The DANN (Deleterious Annotation of genetic variants using Neural Networks) score ranges from 0 to 1, where values
     # closer to 1 indicate a higher likelihood of the variant being deleterious.
-    if variant.dann: #  
-        if variant.dann <= benign_thresholds['bp4_dann_supporting']:
-            dann_weight = "supporting"
-            if variant.dann <= benign_thresholds['bp4_dann_strong']: # strong
-                alg_to_score['dann'] = 3
-                dann_weight = "strong"
-            elif variant.dann <= benign_thresholds['bp4_dann_moderate']: # moderate
-                alg_to_score['dann'] = 2
-                dann_weight = "moderate"
-            else: # supporting
-                alg_to_score['dann'] = 1 
-            printout_text.append(f"{dann_weight} dann {variant.dann}")
+    if "dann" in benign_thresholds['bp4_tools']:
+        if variant.dann: #  
+            if variant.dann <= benign_thresholds['bp4_dann_supporting']:
+                dann_weight = "supporting"
+                if variant.dann <= benign_thresholds['bp4_dann_strong']: # strong
+                    alg_to_score['dann'] = 3
+                    dann_weight = "strong"
+                elif variant.dann <= benign_thresholds['bp4_dann_moderate']: # moderate
+                    alg_to_score['dann'] = 2
+                    dann_weight = "moderate"
+                else: # supporting
+                    alg_to_score['dann'] = 1 
+                printout_text.append(f"{dann_weight} dann {variant.dann}")
 
-    # Conservation data, gerp
-    if variant.gerp:
-        if variant.gerp <= benign_thresholds['bp4_gerp_supporting']:
-            gerp_weight = "supporting"
-            if variant.gerp <= benign_thresholds['bp4_gerp_moderate']: # moderate
-                alg_to_score['gerp'] = 2
-                gerp_weight = "moderate"
-            else: # supporting
-                alg_to_score['gerp'] = 1
-            printout_text.append(f"{gerp_weight} gerp {variant.gerp}")
-    
-    if "splice" in variant.consequence:
-        # consider bases that are predicted to have a strong impact on splicing
-        # Authors suggest .2 as a high end cutoff, .05 as a middle end, and .01 as a low https://github.com/gagneurlab/absplice?tab=readme-ov-file#output
-        splice_score = None # 0 indicates no impact on splicing.
-        if chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome):
-            if chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome).get(variant.position):
-                if chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome).get(variant.position).get(variant.altAllele):
-                    splice_score = chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome).get(variant.position).get(variant.altAllele)
-        if splice_score:
-            if splice_score <= benign_thresholds['bp4_absplice_strong']:
-                absplice_weight = "strong"
-                alg_to_score['absplice'] = 3
-                printout_text.append(f"{absplice_weight} ABSplice {splice_score}")
-    
+    if "gerp" in benign_thresholds['bp4_tools']:
+        # Conservation data, gerp
+        if variant.gerp:
+            if variant.gerp <= benign_thresholds['bp4_gerp_supporting']:
+                gerp_weight = "supporting"
+                if variant.gerp <= benign_thresholds['bp4_gerp_moderate']: # moderate
+                    alg_to_score['gerp'] = 2
+                    gerp_weight = "moderate"
+                else: # supporting
+                    alg_to_score['gerp'] = 1
+                printout_text.append(f"{gerp_weight} gerp {variant.gerp}")
+   
+    if "absplice" in benign_thresholds['bp4_tools']: 
+        if "splice" in variant.consequence:
+            # consider bases that are predicted to have a strong impact on splicing
+            # Authors suggest .2 as a high end cutoff, .05 as a middle end, and .01 as a low https://github.com/gagneurlab/absplice?tab=readme-ov-file#output
+            splice_score = None # 0 indicates no impact on splicing.
+            if chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome):
+                if chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome).get(variant.position):
+                    if chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome).get(variant.position).get(variant.altAllele):
+                        splice_score = chrom_to_pos_to_alt_to_splice_score.get(variant.chromosome).get(variant.position).get(variant.altAllele)
+            if splice_score:
+                if splice_score <= benign_thresholds['bp4_absplice_strong']:
+                    absplice_weight = "strong"
+                    alg_to_score['absplice'] = 3
+                    printout_text.append(f"{absplice_weight} ABSplice {splice_score}")
+
+    # At least one computational classifier was applied 
     if printout_text:
         formatted_printout_text = " | ".join(printout_text)
         lines_of_evidence = len(printout_text)
-        # As per ACMG guidelines, only use one score - therefore average it and round down
-        # Floor division is used to round down because we want to be conservative, increasing specificity
-        if alg_to_score:
-            score = 0
-            best_score = 0
-            best_algs = []
-            # Identify the best score and its algorithm(s)
-            for alg, a_score in alg_to_score.items():
-                if a_score >= best_score:
-                    best_algs.append(alg)
-                    score = a_score
-            # If multiple classifiers agree on the same max score (that isn't supporting), increment by one
-            if len(best_algs) > 1 and best_score > 1:
-                score += 1
-            if len(alg_to_score) < 2 and score == 1:  # A single algorithm at supporting strength is not acceptable
-                return 0, ""
-            score = min(score, 4) # Do not weigh above very strong
+
+        if benign_thresholds['bp4_weighting']: 
+            # As per ACMG guidelines, only use one score - therefore average it and round down
+            # Floor division is used to round down because we want to be conservative, increasing specificity
+            if alg_to_score:
+                score = 0
+                best_score = 0
+                best_algs = []
+                # Identify the best score and its algorithm(s)
+                for alg, a_score in alg_to_score.items():
+                    if a_score >= best_score:
+                        best_algs.append(alg)
+                        score = a_score
+                # If multiple classifiers agree on the same max score (that isn't supporting), increment by one
+                if len(best_algs) > 1 and best_score > 1:
+                    score += 1
+                if len(alg_to_score) < 2 and score == 1:  # A single algorithm at supporting strength is not acceptable
+                    return 0, ""
+                score = min(score, 4) # Do not weigh above very strong
+        else:
+            total_score = 0
+            for score in alg_to_score.values():
+                total_score += score
+            score = int(total_score / len(alg_to_score))
         if score == 1:
             bp4 = f"BP4: {lines_of_evidence} line(s) of computational evidence support a benign effect; {formatted_printout_text}"
         else:
