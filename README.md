@@ -149,3 +149,9 @@ Chris Eisenhart chris.eisenhart@bitscopic.com
 Rachel Brickey rachel@bitscopic.com
 Brian Nadon brian@bitscopic.com
 Joel Mewton joel@bitscopic.com
+
+## What do I cite? ##
+
+Please use the following citation information when referencing BIAS 2015
+
+Eisenhart, C., Brickey, R., Nadon, B. et al. Automating ACMG variant classifications with BIAS-2015 v2.1.1: algorithm analysis and benchmark against the FDA-approved eRepo dataset. Genome Med 17, 148 (2025). https://doi.org/10.1186/s13073-025-01581-y
