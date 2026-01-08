@@ -147,7 +147,6 @@ python bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json 
 
 Chris Eisenhart chris.eisenhart@bitscopic.com
 Rachel Brickey rachel@bitscopic.com
-Brian Nadon brian@bitscopic.com
 Joel Mewton joel@bitscopic.com
 
 ## What do I cite? ##
