@@ -63,17 +63,18 @@ BIAS-2015 software without installing Nirvana, we have provided a test .json fil
 ### Data files & Preprocessing ###
 
 BIAS-2015 v2.0.0 requires multiple data files to run. These are provided to the algorithm through a required_paths.json file
-that lists the expected file and its path.
+that lists the expected file and its path. 
 
 The required BIAS data files for hg19 or hg38 can be viewed and downloaded from AWS here. 
 ```
-aws s3 ls s3://bias-2015 --no-sign-request
-aws s3 cp s3://bias-2015/bias_v2.0.0_hg19_data_files.zip . --no-sign-request
-aws s3 cp s3://bias-2015/bias_v2.0.0_hg38_data_files.zip . --no-sign-request
+aws s3 ls s3://bias-2015/v2.0.0_datasets/ --no-sign-request
+aws s3 cp s3://bias-2015/v2.0.0_datasets/bias_v2.0.0_hg19_data_files.zip . --no-sign-request
+aws s3 cp s3://bias-2015/v2.0.0_datasets/bias_v2.0.0_hg38_data_files.zip . --no-sign-request
 ```
 
 Only data sets v2.0.0+ are compatible with BIAS-2015 v2.0.0. Once the user has all the BIAS-2015 data files in a single directory,
-they can generate a required_paths.json file by running the provided helper script.
+they can generate a required_paths.json file by running the provided helper script. The v2.0.0 datasets work with any v2.#.# BIAS-2015
+versions. 
 
 ```
 unzip bias_v2.0.0_hg19_data_files.zip
