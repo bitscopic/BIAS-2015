@@ -10,34 +10,35 @@ import argparse
 from datetime import datetime
 from pysam import FastaFile 
 
-# GenBank and RefSeq accessions from 
-# https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_000001405.40/
+# GenBank and RefSeq accessions
+# hg19 (GRCh37): https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_000001405.13/
+# hg38 (GRCh38): https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_000001405.40/
 ref_to_accessions = {
     'hg19': {
-        "CM000663.2": "chr1", "NC_000001.11": "chr1",
-        "CM000664.2": "chr2", "NC_000002.12": "chr2",
-        "CM000665.2": "chr3", "NC_000003.12": "chr3",
-        "CM000666.2": "chr4", "NC_000004.12": "chr4",
-        "CM000667.2": "chr5", "NC_000005.10": "chr5",
-        "CM000668.2": "chr6", "NC_000006.12": "chr6",
-        "CM000669.2": "chr7", "NC_000007.14": "chr7",
-        "CM000670.2": "chr8", "NC_000008.11": "chr8",
-        "CM000671.2": "chr9", "NC_000009.12": "chr9",
-        "CM000672.2": "chr10", "NC_000010.11": "chr10",
-        "CM000673.2": "chr11", "NC_000011.10": "chr11",
-        "CM000674.2": "chr12", "NC_000012.12": "chr12",
-        "CM000675.2": "chr13", "NC_000013.11": "chr13",
-        "CM000676.2": "chr14", "NC_000014.9": "chr14",
-        "CM000677.2": "chr15", "NC_000015.10": "chr15",
-        "CM000678.2": "chr16", "NC_000016.10": "chr16",
-        "CM000679.2": "chr17", "NC_000017.11": "chr17",
-        "CM000680.2": "chr18", "NC_000018.10": "chr18",
-        "CM000681.2": "chr19", "NC_000019.10": "chr19",
-        "CM000682.2": "chr20", "NC_000020.11": "chr20",
-        "CM000683.2": "chr21", "NC_000021.9": "chr21",
-        "CM000684.2": "chr22", "NC_000022.11": "chr22",
-        "CM000685.2": "chrX", "NC_000023.11": "chrX",
-        "CM000686.2": "chrY", "NC_000024.10": "chrY",
+        "CM000663.1": "chr1", "NC_000001.10": "chr1",
+        "CM000664.1": "chr2", "NC_000002.11": "chr2",
+        "CM000665.1": "chr3", "NC_000003.11": "chr3",
+        "CM000666.1": "chr4", "NC_000004.11": "chr4",
+        "CM000667.1": "chr5", "NC_000005.9": "chr5",
+        "CM000668.1": "chr6", "NC_000006.11": "chr6",
+        "CM000669.1": "chr7", "NC_000007.13": "chr7",
+        "CM000670.1": "chr8", "NC_000008.10": "chr8",
+        "CM000671.1": "chr9", "NC_000009.11": "chr9",
+        "CM000672.1": "chr10", "NC_000010.10": "chr10",
+        "CM000673.1": "chr11", "NC_000011.9": "chr11",
+        "CM000674.1": "chr12", "NC_000012.11": "chr12",
+        "CM000675.1": "chr13", "NC_000013.10": "chr13",
+        "CM000676.1": "chr14", "NC_000014.8": "chr14",
+        "CM000677.1": "chr15", "NC_000015.9": "chr15",
+        "CM000678.1": "chr16", "NC_000016.9": "chr16",
+        "CM000679.1": "chr17", "NC_000017.10": "chr17",
+        "CM000680.1": "chr18", "NC_000018.9": "chr18",
+        "CM000681.1": "chr19", "NC_000019.9": "chr19",
+        "CM000682.1": "chr20", "NC_000020.10": "chr20",
+        "CM000683.1": "chr21", "NC_000021.8": "chr21",
+        "CM000684.1": "chr22", "NC_000022.10": "chr22",
+        "CM000685.1": "chrX", "NC_000023.10": "chrX",
+        "CM000686.1": "chrY", "NC_000024.9": "chrY",
     },
     'hg38': {
         "CM000663.2": "chr1", "NC_000001.11": "chr1",
@@ -173,10 +174,10 @@ def generate_vcf_data(erepo_filename, reference_genome, cutoff_date, ref_b, verb
             for hgvs in hgvs_expressions: # ex NM_000277.2:c.1A>G or NC_000012.12:g.102917130T>C
                 if "?" in hgvs:
                     continue  # Ignore strange ones
-                components = hgvs.strip(",").split(":") # The separate elements, ex NC_000012.12 and g.102917130T>C
+                components = hgvs.strip(", ").split(":") # The separate elements, ex NC_000012.12 and g.102917130T>C
                 if len(components) < 2: continue
-                reference_assembly = components[0] # NOTE These are chromosome specific!
-                gen_coords = components[1]
+                reference_assembly = components[0].strip() # NOTE These are chromosome specific!
+                gen_coords = components[1].strip()
                 if reference_assembly in ref_to_accessions[ref_b]: # Only looking for standard hg19 chrosomes
                     no_assembly_coordinates = False
                     # The genomic coordinats ex g.102917130T>C start with 'g.'
@@ -208,9 +209,9 @@ def generate_vcf_entry(chrom, pos, ref, alt, line_count):
     """
     return (
         f"{chrom}\t{pos}\t.\t{ref}\t{alt}\t.\tPASS\t"
-        f"DP=10000;MQ=60.00;FractionInformativeReads=1.000;AQ=100.00;"
+        f"DP=10000;MQ=60;FractionInformativeReads=1;AQ=100;"
         f"GermlineStatus=Germline_DB;EreppoLine={line_count}\t"
-        f"GT:SQ:AD:AF:F1R2:F2R1:DP:SB:MB\t0/1:99.99:5000,5000:0.500:2500,2500:2500,2500:10000:5000,5000,5000,5000:5000,5000,5000,5000\n"
+        f"GT:SQ:AD:AF:F1R2:F2R1:DP:SB:MB\t0/1:99.99:5000,5000:0.5:2500,2500:2500,2500:10000:5000,5000,5000,5000:5000,5000,5000,5000\n"
     )
 
 def chrom_sort_key(variant):
