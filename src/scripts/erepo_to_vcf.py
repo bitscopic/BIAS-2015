@@ -10,9 +10,8 @@ import argparse
 from datetime import datetime
 from pysam import FastaFile 
 
-# GenBank and RefSeq accessions
-# hg19 (GRCh37): https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_000001405.13/
-# hg38 (GRCh38): https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_000001405.40/
+# GenBank and RefSeq accessions from 
+# https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_000001405.40/
 ref_to_accessions = {
     'hg19': {
         "CM000663.1": "chr1", "NC_000001.10": "chr1",
@@ -96,6 +95,23 @@ def is_before(date1, date2):
     return parse_date(date1) < parse_date(date2)
 
 
+def split_compound_variants(gen_coords):
+    """
+    Split compound heterozygous HGVS notation into individual variants.
+
+    Example: g.[94508969G>A;94528806A>G] -> ['g.94508969G>A', 'g.94528806A>G']
+
+    Returns a list of individual genomic coordinate strings.
+    If not a compound variant, returns the original as a single-element list.
+    """
+    if "[" in gen_coords and ";" in gen_coords:
+        # Extract content between brackets: g.[...] -> ...
+        bracket_content = gen_coords[gen_coords.index("[")+1:gen_coords.index("]")]
+        # Split by semicolon and prepend 'g.' to each
+        return ["g." + var.strip() for var in bracket_content.split(";")]
+    return [gen_coords]
+
+
 def extract_ref_alt_position_from_g_coords(gen_coords, chromosome, reference_genome, components):
     """
     Take in genomic coordinates  g.102917130T>C and determine the ref and alt.
@@ -114,7 +130,7 @@ def extract_ref_alt_position_from_g_coords(gen_coords, chromosome, reference_gen
         ref, alt = gen_coords[len(position) + 2:].split(">")
         snp_count += 1
     elif "dup" in gen_coords:  # Duplications
-        end_position = gen_coords[len(position) + 3:-3] or str(int(position) + 1)
+        end_position = gen_coords[len(position) + 3:-3] or position
         position = int(position) - 1
         if int(end_position) - position > 1:
             ref = get_dna_sequence(reference_genome, chromosome, int(position) -1, int(end_position))
@@ -134,13 +150,14 @@ def extract_ref_alt_position_from_g_coords(gen_coords, chromosome, reference_gen
         alt = ref[0] + alt
         delins_count += 1
     elif "del" in gen_coords:  # Deletions
-        end_position = gen_coords[len(position) + 3:-3] or str(int(position) + 1)
-        ref = get_dna_sequence(reference_genome, chromosome, int(position) - 1, int(end_position) + 1)
+        end_position = gen_coords[len(position) + 3:-3] or position
+        position = int(position) - 1
+        ref = get_dna_sequence(reference_genome, chromosome, position - 1, int(end_position))
         alt = ref[0]
         del_count += 1
     elif "ins" in gen_coords:  # Insertions
         alt = gen_coords[len(position) + 3:].split("ins")[1]
-        ref = get_dna_sequence(reference_genome, chromosome, int(position), int(position) + 1)
+        ref = get_dna_sequence(reference_genome, chromosome, int(position) - 1, int(position))
         alt = ref + alt
         ins_count += 1
     v_type = (snp_count, dup_count, delins_count, del_count, ins_count)
@@ -174,31 +191,33 @@ def generate_vcf_data(erepo_filename, reference_genome, cutoff_date, ref_b, verb
             for hgvs in hgvs_expressions: # ex NM_000277.2:c.1A>G or NC_000012.12:g.102917130T>C
                 if "?" in hgvs:
                     continue  # Ignore strange ones
-                components = hgvs.strip(", ").split(":") # The separate elements, ex NC_000012.12 and g.102917130T>C
+                components = hgvs.strip(",").split(":") # The separate elements, ex NC_000012.12 and g.102917130T>C
                 if len(components) < 2: continue
-                reference_assembly = components[0].strip() # NOTE These are chromosome specific!
-                gen_coords = components[1].strip()
+                reference_assembly = components[0] # NOTE These are chromosome specific!
+                gen_coords = components[1]
                 if reference_assembly in ref_to_accessions[ref_b]: # Only looking for standard hg19 chrosomes
                     no_assembly_coordinates = False
-                    # The genomic coordinats ex g.102917130T>C start with 'g.'
                     chromosome = ref_to_accessions[ref_b][reference_assembly]
-                    try:
-                        position, ref, alt, v_type = extract_ref_alt_position_from_g_coords(gen_coords, chromosome, reference_genome, components)
-                    except ValueError: # Complex variants that are difficult to accurately translate
-                        continue
-                    snp_count += v_type[0]
-                    dup_count += v_type[1]
-                    delins_count += v_type[2]
-                    del_count += v_type[3]
-                    ins_count += v_type[4]
-                    vcf_data.append((chromosome, str(position), ref, alt, line_count))
-                    break # Only one entry per variant
+                    # Split compound variants (e.g., g.[pos1A>G;pos2C>T]) into individual variants
+                    individual_variants = split_compound_variants(gen_coords)
+                    for single_gen_coords in individual_variants:
+                        try:
+                            position, ref, alt, v_type = extract_ref_alt_position_from_g_coords(single_gen_coords, chromosome, reference_genome, components)
+                        except ValueError: # Complex variants that are difficult to accurately translate
+                            continue
+                        snp_count += v_type[0]
+                        dup_count += v_type[1]
+                        delins_count += v_type[2]
+                        del_count += v_type[3]
+                        ins_count += v_type[4]
+                        vcf_data.append((chromosome, str(position), ref, alt, line_count))
+                    break # Only one entry per variant (but compound variants produce multiple VCF lines)
             if no_assembly_coordinates:
                 no_assembly_comp += 1
                 if verbose:
                     print(line, line_count)
     print(f"Skipped {past_cutoff_date} variants that were submitted past the cutoff date {cutoff_date}")
-    print(f"Skipped {no_assembly_comp} variants where {ref} genomic coordinates were not found")
+    print(f"Skipped {no_assembly_comp} variants where {ref_b} genomic coordinates were not found")
     print(f"Converted {snp_count} snp, {dup_count} dup, {delins_count} del-ins, {del_count} del, {ins_count} ins")
     print(f"Wrote VCF entries for {len(vcf_data)} out of {line_count} total Erepo variants")
     return vcf_data
@@ -209,9 +228,9 @@ def generate_vcf_entry(chrom, pos, ref, alt, line_count):
     """
     return (
         f"{chrom}\t{pos}\t.\t{ref}\t{alt}\t.\tPASS\t"
-        f"DP=10000;MQ=60;FractionInformativeReads=1;AQ=100;"
+        f"DP=10000;MQ=60.00;FractionInformativeReads=1.000;AQ=100.00;"
         f"GermlineStatus=Germline_DB;EreppoLine={line_count}\t"
-        f"GT:SQ:AD:AF:F1R2:F2R1:DP:SB:MB\t0/1:99.99:5000,5000:0.5:2500,2500:2500,2500:10000:5000,5000,5000,5000:5000,5000,5000,5000\n"
+        f"GT:SQ:AD:AF:F1R2:F2R1:DP:SB:MB\t0/1:99.99:5000,5000:0.500:2500,2500:2500,2500:10000:5000,5000,5000,5000:5000,5000,5000,5000\n"
     )
 
 def chrom_sort_key(variant):
@@ -236,7 +255,7 @@ def main():
     parser.add_argument("-R", "--ref_build", required= True, action="store", choices=['hg19', 'hg38'], help="Available ref builds")
     parser.add_argument("-cd", "--cutoff_date", action="store", help="Provide a cutoff date")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose mode")
-    parser.set_defaults(cutoff_date = "2025-01-31")
+    parser.set_defaults(cutoff_date = "2026-02-10")
     parser.set_defaults(ref = 'hg19')
     args = parser.parse_args()
 

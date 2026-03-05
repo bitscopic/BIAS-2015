@@ -1,7 +1,12 @@
+# DEPRECATED: This file is kept for historical reference only.
+# For current setup instructions, please see:
+#   - Nirvana: doc/nirvana_setup.md
+#   - VEP:     doc/vep_setup.md
+
 # Setup instructions for BIAS-2015 AMP/ACMG Variant interpretation, this walks through generating the required
 # files for interpretation. Config files are passed into the code through a json file that defines
 # the file path. A template is provided in the config directory, the user must update each path to include
-# the full path to the file on their machine. 
+# the full path to the file on their machine.
 
 # NOTE: This walkthrough is for hg19/GRCh37!
 

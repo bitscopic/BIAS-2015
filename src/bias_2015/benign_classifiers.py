@@ -461,6 +461,23 @@ def get_bp4(variant, chrom_to_pos_to_alt_to_splice_score):
                     alg_to_score['absplice'] = 3
                     printout_text.append(f"{absplice_weight} ABSplice {splice_score}")
 
+    # AlphaMissense - thresholds from Bergquist et al. Genet Med 2025, Table 2
+    if "alphamissense" in benign_thresholds['bp4_tools']:
+        if variant.alphamissense_score:
+            if variant.alphamissense_score >= benign_thresholds['bp4_alphamissense_path_cutoff']:
+                # Score indicates pathogenicity, disqualify BP4
+                return score, bp4
+            if variant.alphamissense_score <= benign_thresholds['bp4_alphamissense_supporting']:
+                am_weight = "supporting"
+                alg_to_score['alphamissense'] = 1
+                if variant.alphamissense_score <= benign_thresholds['bp4_alphamissense_strong']:
+                    am_weight = "strong"
+                    alg_to_score['alphamissense'] = 3
+                elif variant.alphamissense_score <= benign_thresholds['bp4_alphamissense_moderate']:
+                    am_weight = "moderate"
+                    alg_to_score['alphamissense'] = 2
+                printout_text.append(f"{am_weight} AlphaMissense {variant.alphamissense_score}")
+
     # At least one computational classifier was applied 
     if printout_text:
         formatted_printout_text = " | ".join(printout_text)

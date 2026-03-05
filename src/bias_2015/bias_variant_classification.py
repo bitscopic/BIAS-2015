@@ -289,7 +289,8 @@ def apply_ACMG_codes(variant, name_to_dataset, skip_list):
     # Strong pathogenic classifiers
     ps_rationale = pathogenic_classifiers.get_ps(variant, name_to_dataset['PS1_gene_mut_to_data'], name_to_dataset['PS3_lit_gene_mut_to_data'],
                                                  name_to_dataset['PS3_lit_variant_to_data'], name_to_dataset['PS4_chrom_to_pos_to_gwas_data'],
-                                                 name_to_dataset['PVS1_PP3_BP4_BP7_splice_dict'], skip_list)
+                                                 name_to_dataset['PVS1_PP3_BP4_BP7_splice_dict'],
+                                                 name_to_dataset.get('PS4_clinvar_submitter_counts'), skip_list)
     
     # Moderate pathogenic classifiers
     pm_rationale = pathogenic_classifiers.get_pm(variant, name_to_dataset['PM4_BP3_chrom_to_repeat_regions'], name_to_dataset['PM5_gene_aa_to_var_data'],

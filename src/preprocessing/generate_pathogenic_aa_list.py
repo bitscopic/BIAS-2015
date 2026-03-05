@@ -20,6 +20,7 @@ import logging
 # Add the parent directory of "scripts" to the Python path to make "pipeline_runner_core" importable
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.bias_2015 import extract_from_nirvana_json
+from src.bias_2015 import extract_from_vep_json
 
 
 def parseArgs(): 
@@ -99,7 +100,10 @@ def extract_aa_information(inJson, inVcf, output_file):
             if not signif: continue
             clinvar_var_to_data[variant] = (rs_id, criteria, signif, clinvar_id)
     skipped = 0 
-    hgnc_to_gene_data = extract_from_nirvana_json.load_nirvana_gene_information(inJson) 
+    # Gene data (ClinGen, LOEUF) is not needed for AA extraction — only geneName,
+    # protein_variant, and consequence are written to output. An empty dict means
+    # transcript ranking loses a minor +1 tiebreaker but canonical (+3) dominates.
+    hgnc_to_gene_data = {}
     with open(output_file, 'w') as o_file:
         with open_file(inJson, "rt") as f:
             # gather the header line
@@ -157,6 +161,92 @@ def extract_aa_information(inJson, inVcf, output_file):
                     logging.info("processed %i variants", count)
     if skipped:
         logging.warning("Skipped %i variants! Review script, this should be 0 or very low.", skipped)
+
+
+def extract_aa_information_vep(in_json, in_vcf, output_file):
+    """
+    Extract amino acid information from a VEP JSON file for PS1 classification.
+
+    Args:
+        in_json (str): Path to VEP JSON file (one variant per line)
+        in_vcf (str): Path to filtered ClinVar VCF
+        output_file (str): Path for output TSV
+    """
+    # Load ClinVar variant data from VCF (same as Nirvana version)
+    clinvar_var_to_data = {}
+    with open(in_vcf) as in_file:
+        for line in in_file:
+            if not line or line.startswith("#"):
+                continue
+            split_line = line.strip().split()
+            chrom = split_line[0]
+            pos = split_line[1]
+            clinvar_id = split_line[2]
+            ref = split_line[3]
+            alt = split_line[4]
+            variant = (chrom, pos, ref, alt)
+            term_to_value = {}
+            elements = split_line[7].split(";")
+            for pair in elements:
+                if "=" in pair:
+                    term, value = pair.split("=", 1)
+                    term_to_value[term] = value
+            rs_id = term_to_value.get('RS', '')
+            criteria = term_to_value.get('CLNREVSTAT', '')
+            signif = term_to_value.get('CLNSIG', '')
+            if not criteria or not signif:
+                continue
+            clinvar_var_to_data[variant] = (rs_id, criteria, signif, clinvar_id)
+
+    hgnc_to_gene_data = {}
+
+    skipped = 0
+    count = 0
+    with open(output_file, 'w') as o_file:
+        with open(in_json, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    vep_entry = json.loads(line)
+                    var = extract_from_vep_json.process_variant(vep_entry, hgnc_to_gene_data)
+                    if var is None:
+                        continue
+
+                    v_index = (var.chromosome, var.position, var.refAllele, var.altAllele)
+                    if v_index not in clinvar_var_to_data:
+                        skipped += 1
+                        continue
+
+                    rs_id, criteria, signif, clinvar_id = clinvar_var_to_data[v_index]
+
+                    # Skip intergenic or no AA change
+                    if var.geneName == 'n/a' or var.protein_variant == 'n/a':
+                        continue
+
+                    values = [
+                        var.geneName,
+                        var.protein_variant,
+                        rs_id,
+                        criteria.replace("_", " "),
+                        signif,
+                        clinvar_id,
+                        var.consequence
+                    ]
+                    o_file.write("\t".join(values) + "\n")
+                    count += 1
+
+                except json.JSONDecodeError as e:
+                    logging.warning("Malformed JSON line: %s", str(e))
+                    continue
+
+                if count % 10000 == 0:
+                    logging.info("Processed %i variants", count)
+
+    if skipped:
+        logging.warning("Skipped %i variants not found in ClinVar VCF", skipped)
+
 
 def main():
     """

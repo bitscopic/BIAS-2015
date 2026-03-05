@@ -175,6 +175,7 @@ def get_dbsnpids_to_or(gwas_dbsnp_fp):
             p_value = split_line[17]
             or_value = split_line[19]
             if not or_value: continue
+            if not p_value: continue
             or_value = float(or_value)
             p_value = float(p_value)
             ci_text = split_line[20]
@@ -320,25 +321,6 @@ def get_truncating_gene_to_data(truncating_gene_to_data_fp):
     return truncating_gene_to_data
 
 
-def get_benign_domains(benign_domains_fp):
-    """
-    Load in the benign domains that are identified using Clinvar (see variant documentation)
-    """
-    benign_domains = []
-    with open(benign_domains_fp, 'r') as in_file:
-        for line in in_file:
-            split_line = line.strip().split("\t")
-            if len(split_line) < 4: continue
-            chrom = split_line[0]
-            start = split_line[1]
-            stop = split_line[2]
-            uniprot_acc = split_line[3]
-            benign_domains.append((chrom, start, stop, uniprot_acc))
-    if not benign_domains:
-        print(f"File {benign_domains_fp} does not have any valid entries!")
-        sys.exit(1)
-    return benign_domains
-
 #PS3
 def get_lit_gene_mut_to_data(lit_gene_aa_fp):
     """
@@ -428,8 +410,8 @@ def get_chrom_to_pos_to_alt_to_splice_score(ab_splice_fp):
                 continue
             chrom, pos, mut, score = split_line
             score = float(score)
-            if len(mut) > 3: continue
             alt = mut[2]
+            pos = str(int(pos) + 1)  # Convert BED 0-based to VCF 1-based coordinates
             if chrom_to_pos_to_alt_to_splice_score.get(chrom):
                 if chrom_to_pos_to_alt_to_splice_score[chrom].get(pos):
                     chrom_to_pos_to_alt_to_splice_score[chrom][pos][alt] = score
@@ -442,6 +424,35 @@ def get_chrom_to_pos_to_alt_to_splice_score(ab_splice_fp):
         sys.exit(1)
     return chrom_to_pos_to_alt_to_splice_score
 
+def get_clinvar_submitter_counts(clinvar_submitter_counts_fp):
+    """
+    Load precomputed ClinVar pathogenic submitter counts.
+    Used by PS4 (Note 2 fallback) to determine how many independent submitters
+    classified a variant as pathogenic/likely pathogenic.
+
+    File format (TSV, no header): chrom, pos, ref, alt, pathogenic_count
+    Returns: nested dict chrom -> pos -> (ref, alt) -> count
+    """
+    chrom_to_pos_to_allele_to_count = {}
+    with open(clinvar_submitter_counts_fp, 'r') as in_file:
+        for line in in_file:
+            split_line = line.strip().split("\t")
+            if len(split_line) < 5:
+                continue
+            chrom, pos, ref, alt, count = split_line
+            pos = int(pos)
+            count = int(count)
+            if chrom not in chrom_to_pos_to_allele_to_count:
+                chrom_to_pos_to_allele_to_count[chrom] = {}
+            if pos not in chrom_to_pos_to_allele_to_count[chrom]:
+                chrom_to_pos_to_allele_to_count[chrom][pos] = {}
+            chrom_to_pos_to_allele_to_count[chrom][pos][(ref, alt)] = count
+    if not chrom_to_pos_to_allele_to_count:
+        print(f"File {clinvar_submitter_counts_fp} does not have any valid entries!")
+        sys.exit(1)
+    return chrom_to_pos_to_allele_to_count
+
+
 def get_name_to_dataset(file_paths):
     """
     Gather the datasets and format them for easy python consumption
@@ -453,6 +464,8 @@ def get_name_to_dataset(file_paths):
     name_to_dataset['PS3_lit_gene_mut_to_data']  = get_lit_gene_mut_to_data(file_paths['PS3_literature_gene_aa_fp']) # PS3
     name_to_dataset['PS3_lit_variant_to_data'] = get_lit_variant_to_data(file_paths['PS3_literature_variant_fp']) # PS3
     name_to_dataset['PS4_chrom_to_pos_to_gwas_data'] = get_dbsnpids_to_or(file_paths['PS4_gwas_dbsnp_fp']) # PS4
+    if file_paths.get('PS4_clinvar_submitter_counts_fp'):
+        name_to_dataset['PS4_clinvar_submitter_counts'] = get_clinvar_submitter_counts(file_paths['PS4_clinvar_submitter_counts_fp']) # PS4 Note 2
     name_to_dataset['PM1_chrom_to_pathogenic_domain_list'] = get_chrom_to_pathogenic_domain_list(file_paths['PM1_chrom_to_pathogenic_domain_list_fp']) # PM1
     name_to_dataset['PM4_BP3_chrom_to_repeat_regions'] = get_chrom_to_repeat_regions(file_paths['PM4_BP3_coding_repeat_region_fp']) # PM4 & BP1
     name_to_dataset['PP2_missense_pathogenic_gene_to_region_list'] = get_missense_pathogenic_gene_to_region_list(file_paths['PP2_missense_pathogenic_gene_to_region_list_fp']) # PP2

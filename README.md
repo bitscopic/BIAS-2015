@@ -7,6 +7,8 @@ It is free for academic use.
 BIAS-2015 also has a graphical user interface [BIAS-2015-ui](https://github.com/bitscopic/BIAS-2015-ui) available to
 view and modify classification results.
 
+BIAS-2015 is the core variant classification engine for Bitscopic's commercial platform that supports tertiary analysis and
+report generation. BIAS can be extended to support lab specific customizations. For a commercial demo please [contact us](mailto:bill@bitscopic.com). 
 
 ## Setup ##
 
@@ -46,8 +48,28 @@ mkdir GRCh38
 dotnet ~/bin/Nirvana-v3.18.1/Downloader.dll --ga GRCh38 --out ~/data/GRCh38/
 ```
 
-Then run Nirvana on your VCF file to generate a .json output file.
+Nirvana's supplementary annotation files are no longer actively maintained by Illumina. Bitscopic
+hosts updated versions of two key files — **AlphaMissense** (new) and **ClinVar** (February 2026) —
+that should replace the stale versions bundled with Nirvana 3.18.1.
 
+After downloading the Nirvana data above, replace the outdated ClinVar file and add AlphaMissense.
+The same process applies to GRCh38 (substitute the build name in the paths below).
+
+```
+cd ~/data/GRCh37/SupplementaryAnnotation/GRCh37/
+
+# Remove the outdated ClinVar files
+rm ClinVar_20230930.nsa ClinVar_20230930.nsa.idx ClinVar_20230930.nsi
+
+# Download the updated ClinVar and new AlphaMissense files
+aws s3 cp s3://bias-2015/nirvana_data/GRCh37_updated/ . --no-sign-request --recursive
+```
+
+This adds three files per annotation source: the `.nsa`, `.nsa.idx`, and `.nsa.schema` for both
+ClinVar (February 2026) and AlphaMissense. Nirvana will automatically pick up the new files on the
+next run.
+
+Then run Nirvana on your VCF file to generate a .json output file.
 ```
 dotnet ~/bin/Nirvana-v3.18.1/Nirvana.dll \
   --cache ~/data/GRCh37/Cache/Both \
@@ -57,45 +79,94 @@ dotnet ~/bin/Nirvana-v3.18.1/Nirvana.dll \
   --o bias-2015_test_file
 ```
 
-If you have already have a Nirvana (or an ICA) .json file, you can provide it to BIAS directly. If you would like to test the 
-BIAS-2015 software without installing Nirvana, we have provided a test .json file in our test/data directory.
+If you have already have a Nirvana (or an ICA) .json file, you can provide it to BIAS directly. Please ensure that the
+BIAS preprocessing data was generated with the same version of the annotator you use to make your json files. 
+
+If you would like to test the  BIAS-2015 software without installing Nirvana, we have provided a test .json file in our
+test/data directory.
+
+### VEP (Alternative Annotator) ###
+BIAS-2015 also supports Ensembl's VEP as an alternative annotator. VEP requires Docker and several additional
+annotation files (gnomAD, ClinVar, REVEL, AlphaMissense). See [doc/vep_setup.md](doc/vep_setup.md) for full
+setup and usage instructions.
 
 ### Data files & Preprocessing ###
 
-BIAS-2015 v2.0.0 requires multiple data files to run. These are provided to the algorithm through a required_paths.json file
-that lists the expected file and its path. 
+BIAS-2015 v3.0.0 requires multiple data files to run. These are provided to the algorithm through a required_paths.json file
+that lists the expected file and its path.
 
-The required BIAS data files for hg19 or hg38 can be viewed and downloaded from AWS here. 
+#### Downloading Pre-built Data Files ####
+
+The required BIAS data files for hg19 and hg38 are available from AWS S3. Files for both builds
+are in the same directory, prefixed with `hg19_` or `hg38_`.
+
+**v3.0.0 (recommended)** — individual files:
 ```
-aws s3 ls s3://bias-2015/v2.0.0_datasets/ --no-sign-request
+# List available files
+aws s3 ls s3://bias-2015/v3.0.0_datasets/2026.03.01/ --no-sign-request
+
+# Download all hg19 files
+mkdir bias_hg19_data_files
+aws s3 cp s3://bias-2015/v3.0.0_datasets/2026.03.01/ bias_hg19_data_files/ --no-sign-request --recursive --exclude "*" --include "hg19_*"
+
+# Download all hg38 files
+mkdir bias_hg38_data_files
+aws s3 cp s3://bias-2015/v3.0.0_datasets/2026.03.01/ bias_hg38_data_files/ --no-sign-request --recursive --exclude "*" --include "hg38_*"
+```
+
+**NOTE:** The PS1/PM5 file differs by annotator (`*_nirvana.tsv` vs `*_vep.tsv`). VEP users also
+need the `PS4_clinvar_submitter_counts.tsv` file. The download includes both annotator variants;
+extra files are harmless and will be ignored.
+
+The download also includes pre-built required_paths.json files (`hg19_nirvana_required_paths.json`,
+`hg19_vep_required_paths.json`, etc.). You can use these directly — just update the file paths
+inside to match your local directory. Alternatively, generate a new one:
+```
+# For Nirvana (default)
+python3 src/scripts/create_new_required_paths_file.py bias_hg19_data_files hg19 hg19_required_paths.json
+
+# For VEP
+python3 src/scripts/create_new_required_paths_file.py bias_hg19_data_files hg19 hg19_vep_required_paths.json --annotator vep
+```
+
+**v2.#.# (legacy)** — zip archives for Nirvana only:
+```
 aws s3 cp s3://bias-2015/v2.0.0_datasets/bias_v2.0.0_hg19_data_files.zip . --no-sign-request
 aws s3 cp s3://bias-2015/v2.0.0_datasets/bias_v2.0.0_hg38_data_files.zip . --no-sign-request
 ```
 
-Only data sets v2.0.0+ are compatible with BIAS-2015 v2.0.0. Once the user has all the BIAS-2015 data files in a single directory,
-they can generate a required_paths.json file by running the provided helper script. The v2.0.0 datasets work with any v2.#.# BIAS-2015
-versions. 
+#### Running Preprocessing Locally ####
 
-```
-unzip bias_v2.0.0_hg19_data_files.zip
-python3 src/scripts/create_new_required_paths_file.py bias_v2.0.0_hg19_data_files hg19 hg19_required_paths.json
-```
+Alternatively, users can generate their own BIAS data files by running the preprocessing locally. The entire preprocessing
+pipeline has been included and can be run for hg19 or hg38 with a single command. This process takes multiple hours, will
+download multiple GB of files to the running machine, and will use many GB of disk space as intermediate files. A populated
+required_paths.json file will be written at the end of preprocessing and can be used immediately with BIAS. Please note that
+hg38 requires significantly more disk space and downloads than hg19.
 
-Alternatively, users can generate their own BIAS data files by running the preprocessing locally.  The entire preprocessing
-pipeline has been included and can be ruGn for hg19 or hg38 with a single command.  This process takes multiple hours, will
-download multiple GB of files to the running machine, and will use many GB of disk space as intermediate files. Nirvana is 
-required to run the preprocessing. A populated required_paths.json file will be written at the end of preprocessing and can
-be used immediately with BIAS. Please note that hg38 requires significantly more disk space and downloads than hg19.
-
+For **Nirvana** preprocessing (requires Nirvana installed):
 ```
 mkdir bias_hg19_data_files
-cd bias_hg19_data_files 
+cd bias_hg19_data_files
 python3 ../preprocessing.py \
    --reference_build hg19 \
-   --out . \
+   --annotator nirvana \
+   --output_dir . \
    --os_type linux \
    --nirvana_bin_dir ~/bin/Nirvana-v3.18.1 \
    --nirvana_data_dir ~/data/GRCh37/ \
+   --verbose=DEBUG
+```
+
+For **VEP** preprocessing (requires VEP Docker image and cache, see [doc/vep_setup.md](doc/vep_setup.md)):
+```
+mkdir bias_hg19_vep_data_files
+cd bias_hg19_vep_data_files
+python3 ../preprocessing.py \
+   --reference_build hg19 \
+   --annotator vep \
+   --output_dir . \
+   --os_type linux \
+   --vep_cache_dir ~/.vep \
    --verbose=DEBUG
 ```
 
@@ -103,36 +174,58 @@ python3 ../preprocessing.py \
 
 A Nirvana .json output can be passed through BIAS-2015 with the following command structure. 
 
-NOTE - users must download or generate the BIAS-data and have a valid required_paths.json file before running BIAS! 
+**NOTE:** Users must download or generate the BIAS-data and have a valid required_paths.json file before running BIAS! 
 
+We provide a test data set comprised of 100 randomly selected eRepo variants at test/data/bias-2015_test_file.vcf. 
+Also included is the Nirvana annotation file generated by processing the above VCF with Nirvana 3.18.1 and the static
+Nirvana GRCh37 dataset.
+
+You can run BIAS-2015 on the test data as follows. 
 ```
-python bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv
+python bias_2015.py test/data/bias-2015_test_file.nirvana.json hg19_required_paths.json test_output.tsv
 ```
 
-If you downloaded the bias_v2.0.0_hg19_data_files.zip dataset, and correctly generated a required paths json, then
-this diff should show no differences.
+If you downloaded the v3.0.0 hg19 data files and correctly generated a required paths json, then
+this diff will show no differences.
 ```
-diff test_output.tsv test/data/bias-2015-expected_test_output.tsv
+diff test_output.tsv test/data/bias-2015_test_file.nirvana.bias_output.tsv
 ```
 
 You can view the output file manually or through any tsv reader (excel) to view the classification and rationale
 assigned to each variant. Alternatively users can use the [BIAS-2015-ui](https://github.com/bitscopic/BIAS-2015-ui)
 which simplifies viewing and manually updating results.
 
+## eRepo VCF File ##
+Our latest conversion of the eRepo to vcf is available here;
+
+test/data/erepo_03.02.2026.vcf
+
+We believe it is the best resource for benchmarking ACMG classifier algorithms as you can evaluate code F1 when
+compared to the expert panels.  For more information on this process please refer to our Genome Medicine publication.
 
 ### Providing User Classifications ###
-To include your own classifiers, please provide the optional --user_classifiers flag
+User classifications are the recommended way to populate the 9 ACMG codes that BIAS cannot automatically assign or to
+override a classification with a users expert opinion. 
+
+We have created the [BIAS-2015-ui](https://github.com/bitscopic/BIAS-2015-ui) which enables users to upload BIAS-2015
+output files, view and modify them through the GUI, then save them as an user classifier file. If you would like to see
+an example of a modified file, please use the UI to modify our test output, then download it and diff to see how your 
+changes were stored.  
+
+To include your own classifiers, please provide them in their own file using the optional --user_classifiers flag
 ```
 python bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv --user_classifiers my_classifiers.tsv
 ```
+Classifier files are the same format as BIAS-2015 output with the users updates included inline for each variant. When 
+a user classifier file is provided, the user classifiers will override any algorithmic classifiers.  The algorithm will
+attempt to assign any unassigned codes, then recalculate the combination criteria to determine the variants new 
+classification. 
 
-Classifier files are the same format as BIAS-2015 output. If you have many variants need to be updated, or you wish to update
-your variant classifications with your own script, we recommend you run the pipeline first to make a classifier template then
-update the template. Once you have your classifiers ready in the template file, rerun the pipeline. 
+If you have many variants need to be updated, or you wish to update your variant classifications with your own script, 
+we recommend you run the pipeline first to make a classifier template then update the template. Once you have your 
+classifiers ready in the template file, rerun the pipeline. 
 
-You may update the template file by hand or programmatically. Alternatively we have created the [BIAS-2015-ui](https://github.com/bitscopic/BIAS-2015-ui)
-which enables users to upload BIAS-2015 output files, view and modify them through the GUI, then save them as an user classifier
-file.
+You may update the template file via the GUI, by hand or programmatically.
 
 Example
 ```
@@ -144,14 +237,19 @@ Either manually or programmatically update my_classifiers.tsv to include your ow
 python bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv --user_classifiers my_classifiers.tsv
 ```
 
-## Who do I talk to? ##
-
-Chris Eisenhart chris.eisenhart@bitscopic.com
-Rachel Brickey rachel@bitscopic.com
-Joel Mewton joel@bitscopic.com
-
 ## What do I cite? ##
-
 Please use the following citation information when referencing BIAS 2015
 
-Eisenhart, C., Brickey, R., Nadon, B. et al. Automating ACMG variant classifications with BIAS-2015 v2.1.1: algorithm analysis and benchmark against the FDA-approved eRepo dataset. Genome Med 17, 148 (2025). https://doi.org/10.1186/s13073-025-01581-y
+Eisenhart, C., Brickey, R., Nadon, B. et al. Automating ACMG variant classifications with BIAS-2015 v2.1.1: algorithm 
+analysis and benchmark against the FDA-approved eRepo dataset. Genome Med 17, 148 (2025).
+https://doi.org/10.1186/s13073-025-01581-y
+
+
+## Who do I talk to? ##
+For algorithm questions please contact - 
+
+Chris Eisenhart chris.eisenhart@bitscopic.com 
+
+Rachel Brickey rachel@bitscopic.com
+
+Joel Mewton joel@bitscopic.com

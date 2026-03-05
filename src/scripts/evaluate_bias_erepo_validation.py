@@ -6,7 +6,7 @@ The evRepo data was downloaded and converted to a .vcf file, which was then proc
 algorithm. The resulting output files can be used with this script to see how each algorithm performed.
 
 ClinGen evRepo is a curated repository of evidence-level genomic data, where each entry is manually reviewed by experts and
-classified according to ACMG guidelines, ensuring a consistent and accurate interpretation of variants. By integrating 
+classified according to ACMG guidelines, ensuring a consistent and accurate interpretation of variants. By integrating
 raw evidence, annotations, and metadata, evRepo serves as a source of truth for variant classification. Its rigorous
 review process and adherence to ACMG standards make it an invaluable resource for bioinformatics workflows, variant
 interpretation, and downstream analysis.
@@ -16,6 +16,13 @@ https://erepo.clinicalgenome.org/evrepo/
 """
 import argparse
 import json
+
+from bias_output_utils import (
+    CLASS_TO_SCORE,
+    get_variant_type,
+    calculate_metrics,
+    calculate_concordance_metrics,
+)
 
 def parseArgs():
     """
@@ -49,7 +56,12 @@ def parseArgs():
                         help="The verbosity level for stdout messages (default INFO)",
                         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                         action="store")
+    parser.add_argument("--variant_type",
+                        help="Filter results by variant type",
+                        choices=["snv", "mnv", "insertion", "deletion", "indel", "all"],
+                        action="store")
 
+    parser.set_defaults(variant_type="all")
     parser.set_defaults(sens_spec_output="sens_spec.tsv")
     parser.set_defaults(concordance_output="concordance.tsv")
     parser.set_defaults(verbose="INFO")
@@ -75,16 +87,10 @@ def get_variant_to_user_classification(user_file):
             chromosome, position, reference, alternate = split_line[:4]
             classification = split_line[6]
             details = split_line[-1]
-            if len(reference) > 1 and len(alternate) == 1:
-                reference = reference[1:]
-                alternate = "-"
-            if len(alternate) > 1 and len(reference) == 1:
-                alternate = alternate[1:]
-                reference = "-"
-            if len(alternate) > 1 and len(reference) > 1:
-                if alternate[0] == reference[0]:
-                    alternate = alternate[1:]
-                    reference = reference[1:]
+            # Normalize indels: skip if already in dash notation (VEP-style),
+            # otherwise strip padding base and adjust position (Nirvana/VCF-style)
+            if reference != "-" and alternate != "-":
+                position, reference, alternate = normalize_indel(position, reference, alternate)
             variant = (chromosome, position, reference, alternate)
             variant_to_bit_class[variant] = {
                 "classification": classification,
@@ -203,13 +209,41 @@ def get_variant_to_intervar_classification(intervar_file):
     return variant_to_intrvr_class
 
 
+def normalize_indel(position, reference, alternate):
+    """
+    Normalize an indel by stripping the common prefix and adjusting position.
+
+    Arguments:
+    position -- The VCF position (string)
+    reference -- The reference allele
+    alternate -- The alternate allele
+
+    Returns:
+    Tuple of (adjusted_position, normalized_ref, normalized_alt)
+    """
+    pos = int(position)
+    # Find the length of the common prefix
+    prefix_len = 0
+    while (prefix_len < len(reference) and
+           prefix_len < len(alternate) and
+           reference[prefix_len] == alternate[prefix_len]):
+        prefix_len += 1
+
+    if prefix_len > 0:
+        pos += prefix_len
+        reference = reference[prefix_len:] if reference[prefix_len:] else "-"
+        alternate = alternate[prefix_len:] if alternate[prefix_len:] else "-"
+
+    return str(pos), reference, alternate
+
+
 def get_variant_to_erepo_line(vcf_file):
     """
     Parse the VCF file and map each variant to its corresponding eRepo line.
-    
+
     Arguments:
     vcf_file -- Path to the VCF file.
-    
+
     Returns:
     variant_to_erepo_line -- Dictionary mapping variants to eRepo line numbers.
     """
@@ -220,32 +254,17 @@ def get_variant_to_erepo_line(vcf_file):
                 continue
             chromosome, position, _, reference, alternate, _, _, info, _, _ = line.split('\t')
             info_dict = dict((item.split('=') for item in info.split(';') if '=' in item))
-            if reference[0] == alternate[0]:
-                if len(reference) > 1:
-                    reference = reference[1:]
-                else:
-                    reference = '-'
-                if len(alternate) > 1:
-                    alternate = alternate[1:]
-                else:
-                    alternate = "-"
-
-            variant = (chromosome, position, reference, alternate)
             erepo_line = int(info_dict['EreppoLine'])
+
+            # Normalize indels by stripping common prefix and adjusting position
+            norm_pos, norm_ref, norm_alt = normalize_indel(position, reference, alternate)
+            variant = (chromosome, norm_pos, norm_ref, norm_alt)
             variant_to_erepo_line[variant] = erepo_line
-            if len(reference) > 1 or len(alternate) > 1:
-                index = 0
-                # Ensure bounds check happens before character comparison
-                while index < len(reference) and index < len(alternate) and reference[index] == alternate[index]:
-                    index += 1
-                if index > 0:
-                    # Adjust reference and alternate based on the common prefix
-                    new_reference = reference[index:] if reference[index:] else "-"
-                    new_alternate = alternate[index:] if alternate[index:] else "-"
-                    
-                    # Create a new variant and add it to the dictionary
-                    new_variant = (chromosome, str(int(position) + index), new_reference, new_alternate)
-                    variant_to_erepo_line[new_variant] = erepo_line
+
+            # Also store with original position for SNVs (no common prefix)
+            if norm_pos != position:
+                orig_variant = (chromosome, position, reference, alternate)
+                variant_to_erepo_line[orig_variant] = erepo_line
 
     return variant_to_erepo_line
 
@@ -267,37 +286,13 @@ def get_erepo_line_to_data(erepo_file):
             erepo_line_to_data[line_number] = dict(zip(headers, values))
     return erepo_line_to_data
 
-class_to_score = {
-        'benign': 2,
-        'likely benign': 1,
-        'uncertain': 0,
-        'uncertain significance': 0,
-        'likely pathogenic': -1,
-        'pathogenic': -2
-        }
-
-# Calculate Sensitivity, Specificity, Precision, and F1 Score
-def calculate_metrics(confusion_matrix):
-    """
-    Calculate sensitivity, specificity, precision, and F1 score.
-    """
-    TP = confusion_matrix['TP']
-    FP = confusion_matrix['FP']
-    TN = confusion_matrix['TN']
-    FN = confusion_matrix['FN']
-    
-    sensitivity = TP / (TP + FN) if (TP + FN) > 0 else 0
-    specificity = TN / (TN + FP) if (TN + FP) > 0 else 0
-    precision = TP / (TP + FP) if (TP + FP) > 0 else 0
-    f1_score = (2 * precision * sensitivity) / (precision + sensitivity) if (precision + sensitivity) > 0 else 0
-    
-    return sensitivity, specificity, precision, f1_score
-
-
-def compare_variant_set_to_erepo(variant_to_bit_class, variant_to_erepo_line, erepo_line_to_data, sens_spec_out, conc_out, full_table_out, algorithm):
+def compare_variant_set_to_erepo(variant_to_bit_class, variant_to_erepo_line, erepo_line_to_data, sens_spec_out, conc_out, full_table_out, algorithm, variant_type_filter="all"):
     """
     Takes a set of properly formatted variants and compares it to the eRepo data.
     Adds concordance calculations for ACMG codes (e.g., PVS1, PP2, etc.).
+
+    Arguments:
+    variant_type_filter -- Filter to only include specific variant types: 'snv', 'mnv', 'insertion', 'deletion', 'indel', or 'all'
     """
     # Initialize confusion matrices
     confusion_matrices = {
@@ -317,8 +312,16 @@ def compare_variant_set_to_erepo(variant_to_bit_class, variant_to_erepo_line, er
     compared_variant_count = 0
 
     my_set = set()
+    skipped_by_type = 0
 
     for variant, bit_class in variant_to_bit_class.items():
+        # Apply variant type filter
+        if variant_type_filter != "all":
+            vtype = get_variant_type(variant[2], variant[3])
+            if vtype != variant_type_filter:
+                skipped_by_type += 1
+                continue
+
         erepo_line = variant_to_erepo_line.get(variant)
         if not erepo_line:  # Handle potential variant representation mismatches
             new_pos = int(variant[1]) - 1
@@ -333,8 +336,8 @@ def compare_variant_set_to_erepo(variant_to_bit_class, variant_to_erepo_line, er
             erepo_data = erepo_line_to_data.get(erepo_line)
             if erepo_data:
                 compared_variant_count += 1
-                bit_score = class_to_score[bit_class['classification']]
-                erepo_score = class_to_score[erepo_data['Assertion'].lower()]
+                bit_score = CLASS_TO_SCORE[bit_class['classification']]
+                erepo_score = CLASS_TO_SCORE[erepo_data['Assertion'].lower()]
 
                 # Track user codes
                 alg_acmg_codes = []
@@ -496,6 +499,8 @@ def compare_variant_set_to_erepo(variant_to_bit_class, variant_to_erepo_line, er
             f"called {total_wrong} incorrectly, total concordance {tot_conc:.4f}, total F1 {total_f1:.4f}")
 
     print(f"Compared {compared_variant_count} variants")
+    if variant_type_filter != "all":
+        print(f"Filtered to variant type '{variant_type_filter}', skipped {skipped_by_type} variants of other types")
     print("All user codes")
     print(dict(sorted(user_code_to_count.items())))
     print("All ACMG codes")
@@ -538,7 +543,7 @@ def main():
         variant_to_acmg_class = get_variant_to_intervar_classification(variant_file)
    
     compare_variant_set_to_erepo(variant_to_acmg_class, variant_to_erepo_line, erepo_line_to_data, options.sens_spec_output,
-                                 options.concordance_output, options.full_code_table_output, options.algorithm)
+                                 options.concordance_output, options.full_code_table_output, options.algorithm, options.variant_type)
 
 if __name__ == "__main__":
     main()

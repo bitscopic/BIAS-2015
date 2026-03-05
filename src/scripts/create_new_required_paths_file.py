@@ -2,9 +2,12 @@
 create_new_required_paths_file.py
 
 This script checks for the presence of specific required files in a given directory.
-Users must specify the genome reference build (hg19 or hg38).
+Users must specify the genome reference build (hg19 or hg38) and the annotator (nirvana or vep).
 If all required files are found, it generates a JSON file mapping file types to their absolute paths.
 If any files are missing, it reports them and does not generate the JSON output.
+
+Usage:
+    python3 create_new_required_paths_file.py <input_dir> <ref_b> <output_json> --annotator <nirvana|vep>
 """
 
 import sys
@@ -32,6 +35,11 @@ def parse_args():
     parser.add_argument("output_json",
                         help="Path for the output JSON file.",
                         action="store")
+    parser.add_argument("--annotator",
+                        choices=["nirvana", "vep"],
+                        default="nirvana",
+                        help="Annotation tool used during preprocessing (default: nirvana).",
+                        action="store")
     parser.add_argument("--verbose",
                         help="The verbosity level for stdout messages (default WARNING).",
                         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
@@ -43,18 +51,22 @@ def parse_args():
     return options
 
 
-def check_required_files(input_dir, ref_b):
+def check_required_files(input_dir, ref_b, annotator):
     """
     Check for the presence of required files in the given directory.
+
+    Some files are annotator-specific (e.g. PS1_PM5 clinvar pathogenic aa data
+    differs between nirvana and vep). Other files are shared across annotators.
 
     Returns a tuple of (found_files, missing_files).
     """
     output_dir = os.path.abspath(input_dir)
 
+    # Files shared across both annotators
     files = {
         "PVS1_ncbi_ref_seq_hgmd_fp": f"{ref_b}_PVS1_ncbiRefSeqHgmd.tsv",
         "PVS1_PP3_BP4_BP7_splice_fp": f"{ref_b}_PVS1_PP3_BP4_BP7_splice_data.tsv",
-        "PS1_PM5_clinvar_pathogenic_aa_fp": f"{ref_b}_PS1_PM5_clinvar_pathogenic_aa.tsv",
+        "PS1_PM5_clinvar_pathogenic_aa_fp": f"{ref_b}_PS1_PM5_clinvar_pathogenic_aa_{annotator}.tsv",
         "PS3_literature_gene_aa_fp": f"{ref_b}_PS3_lit_gene_aa.tsv",
         "PS3_literature_variant_fp": f"{ref_b}_PS3_lit_variant.tsv",
         "PS4_gwas_dbsnp_fp": f"{ref_b}_PS4_gwasCatalog.txt",
@@ -62,7 +74,13 @@ def check_required_files(input_dir, ref_b):
         "PM4_BP3_coding_repeat_region_fp": f"{ref_b}_PM4_BP3_coding_repeat_regions.tsv",
         "PP2_missense_pathogenic_gene_to_region_list_fp": f"{ref_b}_PP2_missense_pathogenic_genes.tsv",
         "BP1_truncating_gene_to_data_fp": f"{ref_b}_BP1_truncating_genes.tsv",
+        "BS2_clingen_gene_disease_validity_fp": f"{ref_b}_clingen_gene_disease_validity.csv",
+        "PVS1_PM2_BA1_BS1_BS2_gnomad_gene_constraints_fp": f"{ref_b}_gnomad_gene_constraints.txt",
     }
+
+    # VEP has an additional file for PS4 clinvar submitter counts
+    if annotator == "vep":
+        files["PS4_clinvar_submitter_counts_fp"] = f"{ref_b}_PS4_clinvar_submitter_counts.tsv"
 
     found_files = {}
     missing_files = []
@@ -93,7 +111,7 @@ def main():
     """
     options = parse_args()
 
-    found_files, missing_files = check_required_files(options.input_dir, options.ref_b)
+    found_files, missing_files = check_required_files(options.input_dir, options.ref_b, options.annotator)
 
     if missing_files:
         logging.error("Error: The following required files are missing:")

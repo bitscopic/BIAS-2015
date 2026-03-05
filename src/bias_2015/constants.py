@@ -60,7 +60,7 @@ benign_thresholds = {
     # The intial ACMG standards recommend using multiple lines of computational evidence. Other subsequent publications
     # recommend using a single tool.  By default BIAS considers multiple tools, then applies a generic weighting across
     # all tools used.  This can be overwritten below
-    "bp4_tools": ["phylop", "revel", "dann", "gerp", "absplice"],
+    "bp4_tools": ["phylop", "revel", "dann", "gerp", "absplice", "alphamissense"],
     "bp4_weighting": True,
     #Cutoff values were used from "Calibration of computational tools for missense variant pathogenicity
     #classification and ClinGen recommendations for PP3/BP4 criteria" - table 2
@@ -80,6 +80,12 @@ benign_thresholds = {
     "bp4_gerp_supporting": 2.7,        # GERP supporting benign cutoff (low evolutionary constraint)
     "bp4_gerp_moderate": -4.54,        # GERP moderate benign cutoff from ClinGen recommendations
     "bp4_absplice_strong": .01,        # ABSplice cutoff for assigning a strong score
+
+    # AlphaMissense BP4 thresholds from Bergquist et al. Genet Med 2025, Table 2
+    "bp4_alphamissense_path_cutoff": 0.792,  # Score above this disqualifies BP4 (PP3 supporting threshold)
+    "bp4_alphamissense_supporting": 0.17,    # Supporting benign threshold
+    "bp4_alphamissense_moderate": 0.1,       # Moderate benign threshold
+    "bp4_alphamissense_strong": 0.07,        # Strong benign threshold
 
     # BP6 thresholds for using clinvar evidence
     "bp6_clinvar_minimum_review": 1,
@@ -115,11 +121,12 @@ pathogenic_thresholds = {
     "ps4_pvalue_strong": 0.05,
     "ps4_pvalue_moderate": 0.1,
     "ps4_pvalue_supporting": 0.2,
-    # PS4 TOPMed fallback thresholds
-    "ps4_topmed_ac_supporting_max": 4,  # Maximum allele count for supporting evidence
-    "ps4_topmed_ac_supporting_min": 1,  # Maximum allele count for supporting evidence
-    "ps4_topmed_hc_supporting_max": 9,  # Maximum homozygous count for supporting evidence
-    "ps4_topmed_hc_supporting_min": 3,  # Maximum homozygous count for supporting evidence
+    # PS4 ClinVar submission count fallback thresholds (ACMG Note 2)
+    # When no GWAS data exists, multiple independent ClinVar submitters classifying a variant
+    # as pathogenic/likely pathogenic serves as evidence of observation in multiple unrelated patients.
+    "ps4_clinvar_submitters_supporting": 2,  # Minimum pathogenic submitters for PS4_Supporting
+    "ps4_clinvar_submitters_moderate": 4,    # Minimum pathogenic submitters for PS4_Moderate
+    "ps4_clinvar_submitters_strong": 6,      # Minimum pathogenic submitters for PS4
 
     # PM1 thresholds for pathogenic domains
     # Domains with higher pathogenic-to-benign variant ratios provide stronger evidence of pathogenicity.
@@ -149,7 +156,7 @@ pathogenic_thresholds = {
     # The intial ACMG standards recommend using multiple lines of computational evidence. Other subsequent publications
     # recommend using a single tool.  By default BIAS considers multiple tools, then applies a generic weighting across
     # all tools used.  This can be overwritten below
-    "pp3_tools": ["phylop", "revel", "absplice"],
+    "pp3_tools": ["phylop", "revel", "absplice", "alphamissense"],
     "pp3_weighting": True,
     
     # PP3 thresholds for computational predictions (PhyloP, REVEL, ABSplice)
@@ -159,7 +166,13 @@ pathogenic_thresholds = {
     "pp3_revel_moderate": 0.773,
     "pp3_revel_supporting": 0.644,
     "pp3_absplice_strong": 0.2,
-    
+
+    # AlphaMissense PP3 thresholds from Bergquist et al. Genet Med 2025, Table 2
+    "pp3_alphamissense_supporting": 0.792,   # Supporting pathogenic threshold
+    "pp3_alphamissense_moderate": 0.906,     # Moderate pathogenic threshold
+    "pp3_alphamissense_strong": 0.972,       # Strong pathogenic threshold
+    "pp3_alphamissense_very_strong": 0.99,   # Very strong pathogenic threshold
+
     # PP5 thresholds for using clinvar evidence
     "pp5_clinvar_minimum_review": 1,
 }
