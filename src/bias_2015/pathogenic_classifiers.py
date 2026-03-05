@@ -61,8 +61,11 @@ def get_pvs(variant, gene_name_to_3prime_region, chrom_to_pos_to_alt_to_splice_s
     if len(variant.transcriptList) < 2:
         same_cons = True
     for transcript in variant.transcriptList[1:]:
-        cons = ",".join(transcript['consequence'])
-        if variant.consequence == cons:
+        if transcript.get('consequence'): # NOTE: VEP transcripts dont have consequences currently 
+            cons = ",".join(transcript['consequence'])
+            if variant.consequence == cons:
+                same_cons = True
+        else:
             same_cons = True
     if not same_cons:
         return {'pvs1': (0, f"Out of {len(variant.transcriptList)} transcripts, variant consequence {variant.consequence} in " + \
@@ -265,7 +268,7 @@ def get_ps3(variant, lit_gene_mut_to_data, lit_variant_to_data):
     return score, ps3
 
 
-def get_ps4(variant, chrom_to_pos_to_gwas_data):
+def get_ps4(variant, chrom_to_pos_to_gwas_data, clinvar_submitter_counts):
     """
     PS4    The prevalence of the variants in affected individuals is significantly
            increased compared to the prevalence in controls
@@ -273,18 +276,32 @@ def get_ps4(variant, chrom_to_pos_to_gwas_data):
            Note 1: Relative risk (RR) or odds ratio (OR), as obtained from case-control
                    studies, is >5.0 and the confidence interval around the estimate of RR or OR
                    does not include 1.0. See manuscript for detailed guidance.
-        
+
            Note 2: In instances of very rare variants where case-control studies may
                    not reach statistical significance, the prior observation of the variants in
                    multiple unrelated patients with the same phenotype, and its absence in
                    controls, may be used as moderate level of evidence.
-    
+
     GWAS scores from the GWAS catalog hosted via UCSC Genome Browser were used. See preprocessing
     for more details.
-    
+
+    When no GWAS data exists, ClinVar pathogenic submission counts are used as a proxy for Note 2.
+    Multiple independent ClinVar submitters classifying a variant as pathogenic/likely pathogenic
+    indicates observation in multiple unrelated patients.
+
     evRepo assigns the following weights when applying PS4 depending on supporting evidence
     PS4 (3), PS4_Moderate (2), PS4_Supporting (1)
     """
+    # Apply precomputed ClinVar pathogenic submitter counts if not already set on the variant.
+    # Nirvana sets this from its JSON clinvar data; for VEP we use the precomputed file.
+    if clinvar_submitter_counts and variant.clinvar_pathogenic_submitter_count == 0:
+        chrom = variant.chromosome
+        pos = int(variant.position) if variant.position else 0
+        allele_key = (variant.refAllele, variant.altAllele)
+        precomputed_count = clinvar_submitter_counts.get(chrom, {}).get(pos, {}).get(allele_key, 0)
+        if precomputed_count > 0:
+            variant.clinvar_pathogenic_submitter_count = precomputed_count
+
     score = 0
     ps4 = ""
 
@@ -292,7 +309,7 @@ def get_ps4(variant, chrom_to_pos_to_gwas_data):
     if chrom_to_pos_to_gwas_data.get(variant.chromosome):
         if chrom_to_pos_to_gwas_data[variant.chromosome].get(int(variant.position)):
             or_value, ci_lower, ci_upper, pubmed_id, trait, p_value, _ = chrom_to_pos_to_gwas_data[variant.chromosome][int(variant.position)]
-            if ci_lower > 1.0: # This is a firm requirement set by ACMG, confidence interval must not overlap 1. 
+            if ci_lower > 1.0: # This is a firm requirement set by ACMG, confidence interval must not overlap 1.
                 if or_value > pathogenic_thresholds['ps4_or_strong'] and p_value < pathogenic_thresholds['ps4_pvalue_strong']:
                     score = 3
                 elif or_value > pathogenic_thresholds['ps4_or_moderate'] and p_value < pathogenic_thresholds['ps4_pvalue_moderate']:
@@ -305,25 +322,28 @@ def get_ps4(variant, chrom_to_pos_to_gwas_data):
                     f"{prefix}: Genomic location {variant.chromosome}:{variant.position} associated with {trait}. "
                     f"OR={or_value} (95% CI: {ci_lower}-{ci_upper}), p={p_value}, PubMed={pubmed_id}"
                 )
-        # If no GWAS data, fallback to TOPMed
-        elif hasattr(variant, 'topmed'):
-            topmed_af = variant.topmed.get('allAf', None)
-            if topmed_af is not None:
-                if variant.topmed.get('failedFilter', False):
-                    return 0, ""
-                if (pathogenic_thresholds['ps4_topmed_ac_supporting_min'] <= variant.topmed.get('allAc', 0) <= pathogenic_thresholds['ps4_topmed_ac_supporting_max']) \
-                        or (pathogenic_thresholds['ps4_topmed_hc_supporting_min'] <= variant.topmed.get('allHc') <= pathogenic_thresholds['ps4_topmed_hc_supporting_max']):
-                    score = 1
-                    prefix = f"PS4_{score_to_hum_readable[score]}"
-                    ps4 = (
-                        f"{prefix}: No GWAS data found. "
-                        f"TOPMed allele count {variant.topmed.get('allAc', 0)} and homozygous count {variant.topmed.get('allHc', 0)} "
-                        f"indicate rarity consistent with pathogenicity."
-                    )
+
+    # If no GWAS data, fallback to ClinVar pathogenic submission counts (ACMG Note 2)
+    if score == 0 and variant.clinvar_pathogenic_submitter_count > 0:
+        sub_count = variant.clinvar_pathogenic_submitter_count
+        if sub_count >= pathogenic_thresholds['ps4_clinvar_submitters_strong']:
+            score = 3
+        elif sub_count >= pathogenic_thresholds['ps4_clinvar_submitters_moderate']:
+            score = 2
+        elif sub_count >= pathogenic_thresholds['ps4_clinvar_submitters_supporting']:
+            score = 1
+        if score > 0:
+            prefix = "PS4" if score == 3 else f"PS4_{score_to_hum_readable[score]}"
+            ps4 = (
+                f"{prefix}: No GWAS data found. "
+                f"{sub_count} independent ClinVar submitters classify this variant as pathogenic/likely pathogenic, "
+                f"indicating observation in multiple unrelated patients (ACMG PS4 Note 2)."
+            )
     return score, ps4
 
 
-def get_ps(variant, gene_mut_to_data, lit_gene_mut_to_data, lit_variant_to_data, chrom_to_pos_to_gwas_data, chrom_to_pos_to_alt_to_splice_score, skip_list):
+def get_ps(variant, gene_mut_to_data, lit_gene_mut_to_data, lit_variant_to_data, chrom_to_pos_to_gwas_data,
+           chrom_to_pos_to_alt_to_splice_score, clinvar_submitter_counts, skip_list):
     """
     Look for strong evidence of pathogenicity, apply the PS1, PS3, and PS4 classifiers.
 
@@ -346,7 +366,7 @@ def get_ps(variant, gene_mut_to_data, lit_gene_mut_to_data, lit_variant_to_data,
         ps3 = ""
 
     if "ps4" not in skip_list:
-        score_4, ps4 = get_ps4(variant, chrom_to_pos_to_gwas_data)
+        score_4, ps4 = get_ps4(variant, chrom_to_pos_to_gwas_data, clinvar_submitter_counts)
     else:
         score_4 = 0
         ps4 = ""
@@ -896,7 +916,24 @@ def get_pp3(variant, chrom_to_pos_to_alt_to_splice_score):
                 absplice_weight = "strong"
                 alg_to_score['absplice'] = 3
                 printout_text.append(f"{absplice_weight} ABSplice {splice_score}")
-        
+
+    # AlphaMissense - thresholds from Bergquist et al. Genet Med 2025, Table 2
+    if "alphamissense" in pathogenic_thresholds['pp3_tools']:
+        if variant.alphamissense_score:
+            if variant.alphamissense_score >= pathogenic_thresholds['pp3_alphamissense_supporting']:
+                am_weight = "supporting"
+                alg_to_score['alphamissense'] = 1
+                if variant.alphamissense_score >= pathogenic_thresholds['pp3_alphamissense_very_strong']:
+                    am_weight = "very-strong"
+                    alg_to_score['alphamissense'] = 4
+                elif variant.alphamissense_score >= pathogenic_thresholds['pp3_alphamissense_strong']:
+                    am_weight = "strong"
+                    alg_to_score['alphamissense'] = 3
+                elif variant.alphamissense_score >= pathogenic_thresholds['pp3_alphamissense_moderate']:
+                    am_weight = "moderate"
+                    alg_to_score['alphamissense'] = 2
+                printout_text.append(f"{am_weight} AlphaMissense {variant.alphamissense_score}")
+
     if alg_to_score:
         formatted_printout_text = " | ".join(printout_text)
         lines_of_evidence = len(printout_text)

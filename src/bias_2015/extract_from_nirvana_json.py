@@ -7,170 +7,75 @@ Each variant is stored in a VariantData class
 
 The input file is streamed through as recommended by the NIRVANA team, each line is read and parsed individually
 """
-import json 
+import json
 import logging
 import sys
-import gzip
-import os
-import io
 from src.bias_2015.constants import clinvar_review_status_to_level
+from src.bias_2015.variant_data import VariantData, open_file
+from src.bias_2015 import bias_variant_classification
 
-class VariantData:
+
+def normalize_alleles(ref, alt):
     """
-    Helper class for storing annotated variant information for a single variant
+    Normalize VCF-style alleles to minimal representation.
+
+    VCF uses padding (e.g., REF="TC", ALT="T" for a C deletion).
+    Nirvana normalizes to minimal form (e.g., refAllele="C", altAllele="-").
+
+    This function converts VCF-style to Nirvana-style for comparison.
+
+    Args:
+        ref (str): Reference allele
+        alt (str): Alternate allele
+
+    Returns:
+        tuple: (normalized_ref, normalized_alt)
     """
-    def __init__(self, chromosome, position, ref_allele, alt_allele, variant_type):
-        self.chromosome = chromosome
-        self.position = position
-        self.refAllele = ref_allele
-        self.altAllele = alt_allele
-        self.variantType = variant_type
-        self.alleleFreq = ""
-        self.variantReads = ""
-        self.wildtypeReads = ""
-        self.hgvsg = "n/a"
-        self.hgvsc = "n/a"
-        self.hgvsp = "n/a"
-        self.protein_variant = "n/a" # Gene dependent, ex W515K
-        self.geneName = "n/a" # The gene name
-        self.consequence = "n/a" # Frameshift, missense, stop codon, etc
-        self.significance = "uncertain" # The AMP/ACMG variant interpretation 
-        self.justification = {} # AMP/ACMG Variant interpretation rationale and explanation
-        self.clinvar_significance = ""
-        self.pubmedIds = ""
-        self.geneAssociatedDisease = ""
-        self.dbSnpIds = ""
-        self.transcript = ""
-        self.variantId = ""
-        self.transcriptList = ""
-        self.gnomad = {}
-        self.clinvar_review_status = ""
-        self.oneKg = ""
-        self.domain = ""
-        self.gerp = ""
-        self.dann = ""
-        self.revel = ""
-        self.topmed = {}
-        self.phylopScore = ""
-        self.clingen_gene_validity = []
-        self.gene_gnomad = {}
-        self.clinvar_id = ""
+    # Already normalized
+    if ref == "-" or alt == "-":
+        return ref, alt
 
-    def to_json(self):
-        """
-        Return a json format of the variant annotation class
-        """
-        return {
-            "chromosome": self.chromosome,
-            "position": self.position,
-            "refAllele": self.refAllele,
-            "altAllele": self.altAllele,
-            "variantType": self.variantType,
-            "alleleFrequency": self.alleleFreq,
-            "variantReads": self.variantReads,
-            "wildtypeReads": self.wildtypeReads,
-            "hgvsg": self.hgvsg,
-            "hgvsc": self.hgvsc,
-            "hgvsp": self.hgvsp,
-            "pdot": self.protein_variant,
-            "geneName": self.geneName,
-            "consequence": self.consequence,
-            "significance": self.significance,
-            "geneAssociatedDisease": self.geneAssociatedDisease,
-            "dbSnpIds": self.dbSnpIds,
-            "transcript": self.transcript,
-            "variantId": self.variantId,
-            "annotations": [
-                {
-                    "name": "ACMG Rationale",
-                    "value": self.justification
-                },
-                {
-                    "name": "pubmedIds",
-                    "value": self.pubmedIds,
-                },
-                {
-                    "name": "gnomad",
-                    "value":
-                        {
-                        "alleleFrequency": self.gnomad.get('allAf', 0),
-                        "coverage": self.gnomad.get('coverage', 0)
-                        }
-                },
-                {
-                    "name": "uniprot id",
-                    "value": self.domain
-                }
-                ]
-        }
+    # Strip common prefix (VCF padding)
+    while len(ref) > 1 and len(alt) > 1 and ref[0] == alt[0]:
+        ref = ref[1:]
+        alt = alt[1:]
 
-    def to_tsv(self):
-        """
-        Return a tsv format of the variant annotation class
-        """
-        return "\t".join([self.chromosome,
-            self.position,
-            self.refAllele,
-            self.altAllele,
-            self.variantType,
-            self.consequence,
-            self.significance,
-            self.alleleFreq,
-            self.hgvsg,
-            self.hgvsc,
-            self.hgvsp,
-            self.protein_variant,
-            self.geneName,
-            ",".join(self.pubmedIds),
-            ",".join(self.geneAssociatedDisease),
-            self.dbSnpIds,
-            self.transcript,
-            json.dumps(self.justification)])
+    # Handle remaining padding - if one allele is now a single base that matches the start of the other
+    if len(ref) > 1 and len(alt) == 1 and ref[0] == alt[0]:
+        # Deletion: REF="TC" ALT="T" -> REF="C" ALT="-"
+        ref = ref[1:]
+        alt = "-"
+    elif len(alt) > 1 and len(ref) == 1 and alt[0] == ref[0]:
+        # Insertion: REF="T" ALT="TC" -> REF="-" ALT="C"
+        alt = alt[1:]
+        ref = "-"
 
-    def __str__(self):
-        return f"{self.chromosome}-{self.position}-{self.refAllele}-{self.altAllele}"
+    return ref, alt
 
-def open_file(file_path, mode):
+
+def alleles_match(vcf_ref, vcf_alt, clinvar_ref, clinvar_alt):
     """
-    Open either a normal or a .gz file
-    """
-    _, file_extension = os.path.splitext(file_path)
-    if file_extension == ".gz":
-        return gzip.open(file_path, mode)
-    return io.open(file_path, mode, encoding="utf-8")
+    Check if VCF alleles match ClinVar alleles, accounting for normalization differences.
 
-def load_nirvana_gene_information(nirvana_json_file):
-    """
-    NIRVANA gene information extraction with error handling.
+    Args:
+        vcf_ref (str): Reference allele from VCF/variant
+        vcf_alt (str): Alternate allele from VCF/variant
+        clinvar_ref (str): Reference allele from ClinVar entry
+        clinvar_alt (str): Alternate allele from ClinVar entry
 
-    NIRVANA puts gene information at the end of the .json file, so you have to go through the
-    file once to have it on hand for each variant
+    Returns:
+        bool: True if alleles match after normalization
     """
-    hgnc_to_gene_data = {}
-    try:
-        with open_file(nirvana_json_file, "rt") as f:
-            _ = f.readline()[10:-15]
-            genes_section = False
-            for line in f:
-                # Check if we have reached the end of the genes section
-                if genes_section:
-                    if line.strip() == "]}," or line.strip() == "]}":
-                        break
-                    try:
-                        # Extract gene information
-                        data = json.loads(line[:-2] if line[-2] == "," else line)
-                        hgnc_id = data["name"]
-                        hgnc_to_gene_data[hgnc_id] = data
-                    except json.JSONDecodeError as e:
-                        logging.error("Malformed JSON in line: %s. Error: %s", line.strip(), e)
-                        continue
-                # Check if we have reached the start of the genes section
-                if '"genes":[' in line:
-                    genes_section = True
-    except Exception as e:
-        logging.critical("Failed to load Nirvana gene information from file: %s. Error: %s", nirvana_json_file, e)
-        sys.exit(1)
-    return hgnc_to_gene_data
+    # Direct match
+    if vcf_ref == clinvar_ref and vcf_alt == clinvar_alt:
+        return True
+
+    # Normalize VCF alleles and compare
+    norm_ref, norm_alt = normalize_alleles(vcf_ref, vcf_alt)
+    if norm_ref == clinvar_ref and norm_alt == clinvar_alt:
+        return True
+
+    return False
 
 
 def rank_clinvar_entries(entries):
@@ -290,7 +195,13 @@ def identify_clinvar_information(clin_var_list, ref_allele, alt_allele):
             if 'VCV' in clin_var['variationId']:
                 clinvar_id = clin_var['variationId']
         # Only consider variants that share the same reference base and alt allele
-        if clin_var.get("refAllele", "") != ref_allele or clin_var.get("altAllele", "") != alt_allele:
+        # Use alleles_match to handle VCF padding vs Nirvana normalization differences
+        clinvar_ref = clin_var.get("refAllele", "")
+        clinvar_alt = clin_var.get("altAllele", "")
+        if not alleles_match(ref_allele, alt_allele, clinvar_ref, clinvar_alt):
+            continue
+        # Skip entries without significance (e.g. "no assertion provided" submissions)
+        if "significance" not in clin_var:
             continue
         clean_clinvar_list.append(clin_var)
 
@@ -537,6 +448,14 @@ def process_variant(variant, hgnc_to_gene_data, transcript_database, chrom, posi
     if variant.get("gerpScore"):
         single_variant.gerp = variant['gerpScore']
 
+    # AlphaMissense score - verify alleles match before using
+    if variant.get("AlphaMissense"):
+        am_data = variant["AlphaMissense"]
+        am_ref = am_data.get("refAllele", "")
+        am_alt = am_data.get("altAllele", "")
+        if am_ref == single_variant.refAllele and am_alt == single_variant.altAllele:
+            single_variant.alphamissense_score = am_data.get("AM_score", "")
+
     # Gather the relevant clinvar information for this variant
     if variant.get("clinvar"):
         variant_id, significance, pubmed_joined_ids, review_status, clinvar_id = \
@@ -546,6 +465,21 @@ def process_variant(variant, hgnc_to_gene_data, transcript_database, chrom, posi
         single_variant.clinvar_significance = significance
         single_variant.clinvar_review_status = review_status
         single_variant.clinvar_id = clinvar_id
+        # Count unique submitters classifying this variant as pathogenic/likely pathogenic
+        # Each RCV entry represents one submitter's assertion
+        patho_count = 0
+        for cv in variant["clinvar"]:
+            if not cv["id"].startswith("RCV"):
+                continue
+            cv_ref = cv.get("refAllele", "")
+            cv_alt = cv.get("altAllele", "")
+            if not alleles_match(single_variant.refAllele, single_variant.altAllele, cv_ref, cv_alt):
+                continue
+            for sig in cv.get("significance", []):
+                if "pathogenic" in sig.lower():
+                    patho_count += 1
+                    break
+        single_variant.clinvar_pathogenic_submitter_count = patho_count
 
     # Harvest transcript specific information
     transcript_list = variant.get("transcripts")
@@ -577,35 +511,75 @@ def process_variant(variant, hgnc_to_gene_data, transcript_database, chrom, posi
     return single_variant
 
 
-def write_tsv(outFile, full_tsv_output, reference, creation_time):
+def classify_variants(output_file, nirvana_json_file, hgnc_to_gene_data, name_to_dataset, variant_to_user_classification, skip_list):
     """
-    Write out a tsv output with variant information
+    Stream through a Nirvana JSON file, classify variants, and write results.
+
+    This function processes a Nirvana-annotated JSON file, applying ACMG classification
+    to each variant and writing the results to a TSV output file.
+
+    Args:
+        output_file (str): Path to the output TSV file
+        nirvana_json_file (str): Path to the Nirvana JSON input file
+        hgnc_to_gene_data (dict): Gene-level data (ClinGen validity + gnomAD constraints) keyed by gene name
+        name_to_dataset (dict): Dictionary containing all BIAS ACMG datasets
+        variant_to_user_classification (dict): User-provided classifier overrides keyed by (chrom, pos, ref, alt)
+        skip_list (list): List of ACMG codes to skip during classification
+
+    Returns:
+        int: Number of variants processed
     """
-    header = [
-        'Chromosome',
-        'Position',
-        'Reference allele',
-        'Alternative allele',
-        'Variant type',
-        'Allele freq',
-        'Hgvsg',
-        'Hgvsc',
-        'Hgvsp',
-        'Protein variant',
-        'Gene',
-        'Consequence',
-        'Significance (ClinVar)',
-        'Significance (Bitscopic)',
-        'Consolidated Significance',
-        'PubMed IDs',
-        'Gene-Associated Disease',
-        'Significant',
-        'dbSNP IDs',
-        'Transcript',
-        'Variant ID',
-    ]
-    with open(outFile, "w") as oFile:
-        oFile.write(f"#{reference}\n")
-        oFile.write(f"#{creation_time}\n")
-        oFile.write("#" + "\t".join(header) + "\n")
-        oFile.write("\n".join(full_tsv_output))
+    v_count = 0
+    try:
+        with open(output_file, 'w') as o_file:
+            headers = ["chromosome", "position", "refAllele", "altAllele", "variantType", "consequence",
+                       "acmgClassification", "alleleFreq", "hgvsg", "hgvsc", "hgvsp", "aaChange", "geneName",
+                       "pubmedIds", "associatedDiseases", "dbSnpids", "transcript", "rationale"]
+            o_file.write("\t".join(headers) + "\n")
+
+            with open_file(nirvana_json_file, "rt") as f:
+                _ = f.readline()[10:-15]
+                genes_section = False
+                for line in f:
+                    if genes_section:
+                        break
+                    if '"genes":[' in line:
+                        genes_section = True
+                        continue
+                    if line.startswith("]}"):
+                        continue
+                    try:
+                        data = json.loads(line[:-2] if line[-2] == "," else line)
+                        chrom = data["chromosome"]
+                        pos = str(data["position"])
+                        ref = data["refAllele"]
+                        if not data.get("altAlleles"):
+                            continue  # Minor reference alleles - not supported currently
+                        alt = data["altAlleles"][0]
+                        for variant in data["variants"]:
+                            single_variant = process_variant(
+                                variant, hgnc_to_gene_data, "RefSeq", chrom, pos, ref, alt)
+                            variant_key = (chrom, pos, single_variant.refAllele, single_variant.altAllele)
+                            # Get supplemental user classification, if any
+                            supplemental_codes = variant_to_user_classification.get(variant_key, {})
+
+                            # Append the classification to the variant object (significance, justification)
+                            single_variant.significance, single_variant.justification = \
+                                bias_variant_classification.get_variant_classification(
+                                    single_variant, name_to_dataset, supplemental_codes, skip_list)
+                            v_count += 1
+                            o_file.write(single_variant.to_tsv() + "\n")
+                    except KeyError as e:
+                        logging.error("Missing key in JSON data: %s. Error: %s", line.strip(), e)
+                        raise
+                    except Exception as e:
+                        logging.error("Unexpected error while processing variant: %s. Error: %s", line.strip(), e)
+                        raise
+                    if v_count % 25000 == 0:
+                        logging.debug("Processed %d variants...", v_count)
+
+        logging.info("Processed %d total variants in %d genes", v_count, len(hgnc_to_gene_data))
+    except Exception as e:
+        logging.critical("Error during variant classification. Output file: %s. Error: %s", output_file, e)
+        sys.exit(1)
+    return v_count
