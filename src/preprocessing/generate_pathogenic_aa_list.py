@@ -49,6 +49,28 @@ def parseArgs():
     return options
 
 
+def normalize_vcf_to_vep_coords(chrom, pos, ref, alt):
+    """Convert VCF-style indel coords to VEP-style (strip common prefix, adjust position).
+
+    VEP strips the common leading base from indels and adjusts the position.
+    For example, VCF: chr1, 911991, CCCCCG, C becomes VEP: chr1, 911992, CCCCG, -
+    SNVs are returned unchanged.
+    """
+    min_len = min(len(ref), len(alt))
+    common = 0
+    for i in range(min_len):
+        if ref[i] == alt[i]:
+            common += 1
+        else:
+            break
+    if common == 0:
+        return chrom, pos, ref, alt
+    new_ref = ref[common:] or "-"
+    new_alt = alt[common:] or "-"
+    new_pos = str(int(pos) + common)
+    return chrom, new_pos, new_ref, new_alt
+
+
 def open_file(file_path, mode):
     """
     Open either a normal or a .gz file
@@ -184,7 +206,7 @@ def extract_aa_information_vep(in_json, in_vcf, output_file):
             clinvar_id = split_line[2]
             ref = split_line[3]
             alt = split_line[4]
-            variant = (chrom, pos, ref, alt)
+            variant = normalize_vcf_to_vep_coords(chrom, pos, ref, alt)
             term_to_value = {}
             elements = split_line[7].split(";")
             for pair in elements:
