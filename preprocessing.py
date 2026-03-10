@@ -17,9 +17,9 @@ from src.preprocessing import (
         extract_from_avada_track,
         join_coding_and_repeats,
         find_missense_pathogenic_genes_and_path_trunc_genes,
-        generate_domain_lists
+        generate_domain_lists,
+        generate_submitter_counts
 )
-from src.scripts.generate_clinvar_submitter_counts import generate_submitter_counts
 
 # Supported annotators
 SUPPORTED_ANNOTATORS = ['nirvana', 'vep', 'all']
@@ -140,7 +140,16 @@ def download_and_extract(url, output_file):
 
     The URL should be the compressed file (.gz, .bgz) whereas the output file will be the uncompressed data
     """
-    download_file = url.split("/")[-1]
+    # Derive download filename from output_file to avoid collisions when
+    # different builds share the same URL filename (e.g. both hg19 and hg38
+    # ClinVar VCFs are named "clinvar.vcf.gz" at the source).
+    url_filename = url.split("/")[-1]
+    url_ext = ""
+    if url_filename.endswith(".gz"):
+        url_ext = ".gz"
+    elif url_filename.endswith(".bgz"):
+        url_ext = ".bgz"
+    download_file = os.path.basename(output_file) + url_ext if url_ext else os.path.basename(output_file)
     base_file = download_file.rsplit('.', 1)[0]
     if os.path.exists(download_file):
         # The compressed/raw download file exists — decompress it
@@ -158,8 +167,8 @@ def download_and_extract(url, output_file):
         shutil.copy(base_file, output_file)
         return
 
-    logging.debug("Downloading %s", url)
-    command = ["wget", url]
+    logging.debug("Downloading %s as %s", url, download_file)
+    command = ["wget", "-O", download_file, url]
     run_command(" ".join(command))
 
     if url.endswith(".gz"):
