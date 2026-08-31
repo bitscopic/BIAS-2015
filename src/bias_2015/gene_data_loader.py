@@ -120,6 +120,7 @@ def load_gnomad_gene_constraints(gnomad_constraints_path):
                 "pNull": safe_float(fields[col['pNull']]),
                 "synZ": safe_float(fields[col['syn_z']]),
                 "misZ": safe_float(fields[col['mis_z']]),
+                "oe_mis_upper": safe_float(fields[col['oe_mis_upper']]),
             }
 
             # Keep the most constrained (lowest LOEUF) entry per gene

@@ -14,6 +14,8 @@ report generation. BIAS can be extended to support lab specific customizations. 
 
 ### Required Libraries ###
 
+**NOTE:** All commands should be run from the `bias-2015` root directory unless otherwise specified.
+
 #### General Use ####
 BIAS-2015 requires Nirvana to annotate VCF files—see below for installation instructions.
 Nirvana requires [.NET](https://www.microsoft.com/net/download/core) as a dependency.
@@ -22,6 +24,12 @@ BIAS-2015 exclusively uses Python3 standard libraries, so no additional Python l
 
 The machine must be able to read and unzip `.gz` files. This requires different libraries depending on the  
 operating system. See the official documentation for more details: [gzip.org](https://www.gzip.org/).
+
+The machine must have **AWS CLI** installed. 
+
+Install: `brew install awscli`
+
+Verify: `aws --version`
 
 #### Preprocessing ####
 The preprocessing requires an executable (`bigBedToBed`) that is only available on Mac and Linux machines. Additionally
@@ -92,6 +100,9 @@ setup and usage instructions.
 
 ### Data files & Preprocessing ###
 
+**Quick start**: If you just want to run BIAS, download the prebuilt files from S3 (recommended).
+Running preprocessing locally is an advanced feature and is not required.
+
 BIAS-2015 v3.0.0 requires multiple data files to run. These are provided to the algorithm through a required_paths.json file
 that lists the expected file and its path.
 
@@ -118,9 +129,18 @@ aws s3 cp s3://bias-2015/v3.0.0_datasets/2026.03.01/ bias_hg38_data_files/ --no-
 need the `PS4_clinvar_submitter_counts.tsv` file. The download includes both annotator variants;
 extra files are harmless and will be ignored.
 
+**BA1 / BS1 / PM2 allele-frequency cutoffs.** These codes resolve their AF thresholds in a
+three-tier cascade: (1) a gene-specific VCEP rule from the ClinGen CSpec registry
+(`data/vcep/vcep_af_cutoffs.tsv`) if one exists, (2) a data-derived cutoff stratified by gnomAD
+missense O/E upper bound and mode of inheritance (`data/af_cutoffs/mis_oe_upper_binned_cutoffs.tsv`
++ `data/af_cutoffs/gene_to_moi.tsv`), and (3) a flat ACMG default (`ACMG_DEFAULT_AF_CUTOFFS` in
+`src/bias_2015/constants.py`). All three data files ship committed in the repo; no download is
+required for the AF cutoffs. LOEUF is no longer used for BA1/BS1/PM2; it remains in use for PVS1
+(strength adjustment) and BS2 (observed-count tiering).
+
 The download also includes pre-built required_paths.json files (`hg19_nirvana_required_paths.json`,
-`hg19_vep_required_paths.json`, etc.). You can use these directly — just update the file paths
-inside to match your local directory. Alternatively, generate a new one:
+`hg19_vep_required_paths.json`, etc.). You can use these directly by updating the file paths
+inside to match your local directory. However, generating a new required_paths.json using the script below is recommended, as it automatically sets the correct paths for your local machine.
 ```
 # For Nirvana (default)
 python3 src/scripts/create_new_required_paths_file.py bias_hg19_data_files hg19 hg19_required_paths.json
@@ -130,6 +150,7 @@ python3 src/scripts/create_new_required_paths_file.py bias_hg19_data_files hg19 
 ```
 
 **v2.#.# (legacy)** — zip archives for Nirvana only:
+**NOTE:** This step can be skipped when using the recommended v3.0.0 data files.
 ```
 aws s3 cp s3://bias-2015/v2.0.0_datasets/bias_v2.0.0_hg19_data_files.zip . --no-sign-request
 aws s3 cp s3://bias-2015/v2.0.0_datasets/bias_v2.0.0_hg38_data_files.zip . --no-sign-request
@@ -182,7 +203,7 @@ Nirvana GRCh37 dataset.
 
 You can run BIAS-2015 on the test data as follows. 
 ```
-python bias_2015.py test/data/bias-2015_test_file.nirvana.json hg19_required_paths.json test_output.tsv
+python3 bias_2015.py test/data/bias-2015_test_file.nirvana.json hg19_required_paths.json test_output.tsv
 ```
 
 If you downloaded the v3.0.0 hg19 data files and correctly generated a required paths json, then
@@ -214,14 +235,14 @@ changes were stored.
 
 To include your own classifiers, please provide them in their own file using the optional --user_classifiers flag
 ```
-python bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv --user_classifiers my_classifiers.tsv
+python3 bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv --user_classifiers my_classifiers.tsv
 ```
 Classifier files are the same format as BIAS-2015 output with the users updates included inline for each variant. When 
 a user classifier file is provided, the user classifiers will override any algorithmic classifiers.  The algorithm will
 attempt to assign any unassigned codes, then recalculate the combination criteria to determine the variants new 
 classification. 
 
-If you have many variants need to be updated, or you wish to update your variant classifications with your own script, 
+If you have many variants that need to be updated, or you wish to update your variant classifications with your own script, 
 we recommend you run the pipeline first to make a classifier template then update the template. Once you have your 
 classifiers ready in the template file, rerun the pipeline. 
 
@@ -229,12 +250,12 @@ You may update the template file via the GUI, by hand or programmatically.
 
 Example
 ```
-python bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv
+python3 bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv
 mv test_output.tsv my_classifiers.tsv
 ```
 Either manually or programmatically update my_classifiers.tsv to include your own ACMG classifiers. Then re run
 ```
-python bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv --user_classifiers my_classifiers.tsv
+python3 bias_2015.py test/data/bias-2015_test_file.json hg19_required_paths.json test_output.tsv --user_classifiers my_classifiers.tsv
 ```
 
 ## What do I cite? ##

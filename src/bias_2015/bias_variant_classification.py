@@ -293,19 +293,30 @@ def apply_ACMG_codes(variant, name_to_dataset, skip_list):
                                                  name_to_dataset.get('PS4_clinvar_submitter_counts'), skip_list)
     
     # Moderate pathogenic classifiers
+    gene_to_moi = name_to_dataset.get('BA1_BS1_PM2_gene_to_moi')
+    mis_oe_moi_af_cutoffs = name_to_dataset.get('BA1_BS1_PM2_mis_oe_moi_af_cutoffs')
+
     pm_rationale = pathogenic_classifiers.get_pm(variant, name_to_dataset['PM4_BP3_chrom_to_repeat_regions'], name_to_dataset['PM5_gene_aa_to_var_data'],
-                                                 name_to_dataset['PM1_chrom_to_pathogenic_domain_list'], name_to_dataset['PS1_gene_mut_to_data'], 
-                                                 name_to_dataset['PVS1_PP3_BP4_BP7_splice_dict'], skip_list)
+                                                 name_to_dataset['PM1_chrom_to_pathogenic_domain_list'], name_to_dataset['PS1_gene_mut_to_data'],
+                                                 name_to_dataset['PVS1_PP3_BP4_BP7_splice_dict'], skip_list,
+                                                 name_to_dataset.get('BA1_BS1_PM2_vcep_gene_to_af_rules'),
+                                                 mis_oe_moi_af_cutoffs, gene_to_moi)
 
     # Supporting pathogenic classifiers
     pp_rationale = pathogenic_classifiers.get_pp(variant, name_to_dataset['PP2_missense_pathogenic_gene_to_region_list'],
                                                  name_to_dataset['PVS1_PP3_BP4_BP7_splice_dict'], skip_list)
 
     # Stand alone benign classifiers
-    ba_rationale = benign_classifiers.get_ba(variant, skip_list)
+    ba_rationale = benign_classifiers.get_ba(variant, skip_list,
+                                             name_to_dataset.get('BA1_BS1_PM2_vcep_gene_to_af_rules'),
+                                             mis_oe_moi_af_cutoffs, gene_to_moi)
 
-    # Strong benign classifiers
-    bs_rationale = benign_classifiers.get_bs(variant, skip_list)
+    # Strong benign classifiers — skip BS1 if BA1 already applied (BA1 supersedes BS1;
+    # curators don't record BS1 in that case, so BIAS shouldn't either).
+    ba1_applied = ba_rationale.get('ba1', (0, ""))[0] > 0
+    bs_rationale = benign_classifiers.get_bs(variant, skip_list, name_to_dataset.get('BA1_BS1_PM2_vcep_gene_to_af_rules'),
+                                             ba1_applied=ba1_applied,
+                                             mis_oe_moi_af_cutoffs=mis_oe_moi_af_cutoffs, gene_to_moi=gene_to_moi)
 
     # Supporting benign classifiers
     bp_rationale = benign_classifiers.get_bp(variant, name_to_dataset['BP1_truncating_gene_to_data'], name_to_dataset['PM4_BP3_chrom_to_repeat_regions'], 

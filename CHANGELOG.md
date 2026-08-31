@@ -5,6 +5,20 @@ All notable changes to BIAS-2015 will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Derived missense-O/E × MOI AF cutoffs for BA1/BS1/PM2.** BIAS-2015 now consults a data-derived, constraint-stratified AF cutoff table (`data/af_cutoffs/mis_oe_upper_binned_cutoffs.tsv`) as the second tier of the BA1/BS1/PM2 cascade. Cutoffs are binned by gnomAD v4.1.1 `oe_mis_upper` and stratified by mode of inheritance (AD vs AR).
+- **Gene → MOI lookup.** New committed lookup `data/af_cutoffs/gene_to_moi.tsv` resolves per-gene mode of inheritance using HPO → GenCC → ClinGen as ordered fallback sources (expanding the previous ClinGen-only resolution). Loaded by `src/bias_2015/mis_oe_moi_lookup.py`.
+- **New `mis_oe_moi_lookup` module.** Provides `load_gene_to_moi`, `load_mis_oe_moi_af_cutoffs`, `resolve_moi`, and `get_mis_oe_moi_cutoff` for the derived-cutoff branch of BA1/BS1/PM2.
+- **Calibration pipeline for the derived cutoffs.** New scripts under `src/scripts/calibration/` (`05`–`09`) that filter ClinVar/Nirvana, join MOI and gnomAD constraints, derive constraint-stratified cutoffs via KDE + Tavtigian LR thresholds with cluster bootstrap CIs, and produce cross-validation plots.
+
+### Changed
+
+- **BA1/BS1/PM2 evaluation cascade.** Population-AF codes now resolve in tiered order: VCEP rule (if present) → derived missense-O/E × MOI cutoff → data-derived flat fallback in `constants.py`. The flat fallback replaces the historical ACMG 2015 defaults (BA1 5%, BS1 0.1%, PM2 0.1%), which were empirically too permissive during ClinVar validation.
+- **BS1 fires at three strengths (Strong/Moderate/Supporting).** Matches the stratification of the derived cutoff table.
+
 ## [3.0.0] - 2026-03-05
 
 ### Added

@@ -13,6 +13,7 @@ import sys
 from src.bias_2015.constants import clinvar_review_status_to_level
 from src.bias_2015.variant_data import VariantData, open_file
 from src.bias_2015 import bias_variant_classification
+from src.bias_2015.vcep_lookup import compute_popmax
 
 
 def normalize_alleles(ref, alt):
@@ -431,6 +432,11 @@ def process_variant(variant, hgnc_to_gene_data, transcript_database, chrom, posi
 
     if variant.get("gnomad"):
         single_variant.gnomad = variant.get("gnomad")
+        # Compute popmax from per-population AFs so VCEP rules that specify
+        # popmax/grpmax/FAF95 have a metric to evaluate against.
+        popmax = compute_popmax(single_variant.gnomad)
+        if popmax is not None:
+            single_variant.gnomad["popmax"] = popmax
     else:
         single_variant.gnomad = {}
 
