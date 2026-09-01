@@ -501,8 +501,7 @@ def main():
     missense_output = os.path.join(output_dir, f"{ref_b}_PP2_missense_pathogenic_genes.tsv")
     truncating_output = os.path.join(output_dir, f"{ref_b}_BP1_truncating_genes.tsv")
     # VCEP AF cutoffs are gene-only (build-agnostic) and committed to the repo at
-    # data/vcep/. Preprocessing skips regeneration if the snapshot TSV already exists
-    # (see skip_if_exists guard below); delete the file first to force a refresh.
+    # data/vcep/. Rerunning preprocessing refreshes the committed snapshot in place.
     _repo_root = os.path.abspath(os.path.dirname(__file__))
     vcep_af_output = os.path.join(_repo_root, "data", "vcep", "vcep_af_cutoffs.tsv")
     vcep_af_review = os.path.join(_repo_root, "data", "vcep", "vcep_af_cutoffs_review.tsv")

@@ -1,11 +1,55 @@
 """
 BIAS-2015 implementation of the ACMG 2015 germline pathogenic classifiers
 """
+import re
+
 from .constants import clinvar_review_status_to_level, score_to_hum_readable, pathogenic_thresholds, ACMG_DEFAULT_AF_CUTOFFS
 from .vcep_lookup import get_vcep_rule
 from .mis_oe_moi_lookup import get_mis_oe_moi_cutoff
 
-def get_pvs(variant, gene_name_to_3prime_region, chrom_to_pos_to_alt_to_splice_score, skip_list):
+
+_HGVSP_AA_POS_RE = re.compile(r'[A-Za-z]{1,3}(\d+)')
+
+
+def _pick_transcript_nmd_info(nmd_info_list, variant):
+    """
+    Choose the TranscriptNmdInfo entry that best matches the variant's primary
+    transcript. Falls back to the first entry when no match is found so PVS1 still
+    has coordinates to work with.
+    """
+    if not nmd_info_list:
+        return None
+    primary_id = None
+    if variant.transcriptList:
+        primary_id = variant.transcriptList[0].get('transcript')
+    if primary_id:
+        primary_stem = primary_id.split('.')[0]
+        for info in nmd_info_list:
+            if info.transcript_id.split('.')[0] == primary_stem:
+                return info
+    return nmd_info_list[0]
+
+
+def _extract_truncation_aa(variant):
+    """
+    Return the amino-acid position where translation is truncated, or None if it
+    cannot be parsed (e.g. splice variants with no HGVSp).
+
+    Handles the two BIAS-internal shorthand forms produced by
+    extract_from_nirvana_json.convert_mutation_format / extract_from_vep_json
+    (e.g. 'K1691fsN15*', 'R123*') and, as a fallback, raw HGVSp strings like
+    'NP_000050.2:p.(Lys1691AsnfsTer15)' or 'p.(Arg1234Ter)'.
+    """
+    for candidate in (variant.protein_variant, variant.hgvsp):
+        if not candidate or candidate == 'n/a':
+            continue
+        match = _HGVSP_AA_POS_RE.search(candidate)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def get_pvs(variant, gene_name_to_nmd_info, chrom_to_pos_to_alt_to_splice_score, skip_list):
     """
     Very strong evidence of pathogenicity
         PVS1    Null variants (nonsense, frameshift, canonical +/−1 or 2 splice sites, initiation
@@ -43,12 +87,34 @@ def get_pvs(variant, gene_name_to_3prime_region, chrom_to_pos_to_alt_to_splice_s
     if not valid_variant:
         return {'pvs1': (0, f"{variant.consequence} is not a LoF consequence")}
 
-    # Caveat 2: LOF variant is at the extreme 3' end of a gene (final 50 of last coding exon)
-    null_region = ('chr0', -10, -1)
-    prime_region = gene_name_to_3prime_region.get(variant.geneName, null_region)
-    _, prime_start, prime_end = prime_region
-    if prime_start <= int(variant.position) <= prime_end:
-        return {'pvs1': (0, f"Position {variant.position} is in the extreme three prime region ({prime_start}-{prime_end}) of the last coding exon in gene {variant.geneName}")}
+    # Caveat 2: variant is predicted to escape nonsense-mediated decay (PTC in the
+    # 3'-most exon or within the last 50 nt of the penultimate exon). Downgrade per
+    # the ClinGen SVI PVS1 decision tree (Abou Tayoun et al. 2018) based on how much
+    # of the protein is lost.
+    nmd_info_list = gene_name_to_nmd_info.get(variant.geneName, [])
+    transcript_info = _pick_transcript_nmd_info(nmd_info_list, variant)
+    pos = int(variant.position)
+    in_last_exon = False
+    in_penult_last50 = False
+    if transcript_info is not None:
+        le_start, le_end = transcript_info.last_exon_range
+        in_last_exon = le_start <= pos <= le_end
+        if transcript_info.penult_last50_range:
+            pe_start, pe_end = transcript_info.penult_last50_range
+            in_penult_last50 = pe_start <= pos <= pe_end
+    if in_last_exon or in_penult_last50:
+        zone = "last exon" if in_last_exon else "last 50 nt of penultimate exon"
+        trunc_aa = _extract_truncation_aa(variant)
+        total_aa = transcript_info.total_aa
+        if trunc_aa is None or total_aa == 0:
+            return {'pvs1': (3, f"PVS1_strong: NMD-escape ({zone}) in gene {variant.geneName}; "
+                                f"%-of-protein indeterminate for consequence {variant.consequence}.")}
+        pct_lost = (total_aa - trunc_aa) / total_aa
+        if pct_lost > 0.10:
+            return {'pvs1': (3, f"PVS1_strong: NMD-escape ({zone}) truncation removes {pct_lost:.1%} of protein "
+                                f"in gene {variant.geneName} (aa {trunc_aa}/{total_aa}).")}
+        return {'pvs1': (2, f"PVS1_moderate: NMD-escape ({zone}) truncation removes only {pct_lost:.1%} of protein "
+                            f"in gene {variant.geneName} (aa {trunc_aa}/{total_aa}).")}
 
     # Caveat 3: Check splice variants that lead to exon skipping but leave the remainder of the protein intact
     # One must also be cautious in assuming that a null variant will lead to disease if found in an exon where no

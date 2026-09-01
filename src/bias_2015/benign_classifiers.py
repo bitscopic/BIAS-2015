@@ -23,10 +23,8 @@ def get_ba1(variant, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi
     gnomad_af = variant.gnomad.get('allAf', 0) if variant.gnomad else 0
     highest_af = max(onekg_af, gnomad_af)
 
-    # Default (level 3): ACMG BA1 threshold. Comparator is `>` for the fallback and mis_oe
-    # tiers; only VCEP rules can override it (e.g. some rules specify `>=`).
+    # Default (level 3): ACMG BA1 threshold.
     ba1_cutoff = ACMG_DEFAULT_AF_CUTOFFS["BA1"]
-    ba1_comparator = ">"
     threshold_source_label = "ACMG default"
 
     # Level 2: mis_oe × MOI stratified table.
@@ -54,21 +52,14 @@ def get_ba1(variant, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi
                     onekg_af = 0
                     gnomad_af = popmax_af
             ba1_cutoff = vcep_rule.threshold
-            ba1_comparator = vcep_rule.comparator or ">"
             threshold_source_label = f"VCEP {vcep_rule.gn_id} v{vcep_rule.version}"
 
-    # Check if the variant exceeds the BA1 threshold, honoring the VCEP rule's comparator
-    # (falls back to `>` for the mis_oe/ACMG-default tiers).
-    def fires(af):
-        if ba1_comparator == ">=":
-            return af >= ba1_cutoff
-        return af > ba1_cutoff
-
-    if fires(highest_af):
+    # Check if the variant exceeds the BA1 threshold
+    if highest_af > ba1_cutoff:
         score = 5
-        source = "both One Thousand Genomes & GnomAD" if fires(onekg_af) and fires(gnomad_af) else \
-                 "One Thousand Genomes" if fires(onekg_af) else "GnomAD"
-        ba1 = f"BA1: {source} general population AF={highest_af*100:.5f}% {ba1_comparator} " + \
+        source = "both One Thousand Genomes & GnomAD" if onekg_af > ba1_cutoff and gnomad_af > ba1_cutoff else \
+                 "One Thousand Genomes" if onekg_af > ba1_cutoff else "GnomAD"
+        ba1 = f"BA1: {source} general population AF={highest_af*100:.5f}% exceeds " + \
                 f"{threshold_source_label}-based threshold ({ba1_cutoff*100:.5f}%)."
 
     return score, ba1

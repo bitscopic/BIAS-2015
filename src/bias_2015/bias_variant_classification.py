@@ -283,7 +283,7 @@ def apply_ACMG_codes(variant, name_to_dataset, skip_list):
     as to why each code was applied, back in a rationale dictionary.
     """
     # Very strong pathogenic classifiers
-    pvs_rationale = pathogenic_classifiers.get_pvs(variant, name_to_dataset['PVS1_gene_name_to_3prime_region'],
+    pvs_rationale = pathogenic_classifiers.get_pvs(variant, name_to_dataset['PVS1_gene_name_to_nmd_info'],
                                                    name_to_dataset['PVS1_PP3_BP4_BP7_splice_dict'], skip_list)
 
     # Strong pathogenic classifiers
