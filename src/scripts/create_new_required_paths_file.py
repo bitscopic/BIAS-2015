@@ -51,6 +51,16 @@ def parse_args():
     return options
 
 
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+# Committed, gene-only (build-agnostic) data files that ship with the repo rather
+# than being regenerated per-build into `input_dir`.
+_REPO_FILES = {
+    "BA1_BS1_PM2_vcep_af_cutoffs_fp": os.path.join(_REPO_ROOT, "data", "vcep", "vcep_af_cutoffs.tsv"),
+    "BA1_BS1_PM2_mis_oe_moi_af_cutoffs_fp": os.path.join(_REPO_ROOT, "data", "af_cutoffs", "mis_oe_upper_binned_cutoffs.tsv"),
+    "BA1_BS1_PM2_gene_to_moi_fp": os.path.join(_REPO_ROOT, "data", "af_cutoffs", "gene_to_moi.tsv"),
+}
+
+
 def check_required_files(input_dir, ref_b, annotator):
     """
     Check for the presence of required files in the given directory.
@@ -62,7 +72,7 @@ def check_required_files(input_dir, ref_b, annotator):
     """
     output_dir = os.path.abspath(input_dir)
 
-    # Files shared across both annotators
+    # Files shared across both annotators, keyed by filename within input_dir.
     files = {
         "PVS1_ncbi_ref_seq_hgmd_fp": f"{ref_b}_PVS1_ncbiRefSeqHgmd.tsv",
         "PVS1_PP3_BP4_BP7_splice_fp": f"{ref_b}_PVS1_PP3_BP4_BP7_splice_data.tsv",
@@ -87,6 +97,13 @@ def check_required_files(input_dir, ref_b, annotator):
 
     for key, filename in files.items():
         full_path = os.path.join(output_dir, filename)
+        if os.path.exists(full_path):
+            found_files[key] = full_path
+        else:
+            missing_files.append(full_path)
+
+    # Repo-shipped files use their fixed committed location, not input_dir.
+    for key, full_path in _REPO_FILES.items():
         if os.path.exists(full_path):
             found_files[key] = full_path
         else:

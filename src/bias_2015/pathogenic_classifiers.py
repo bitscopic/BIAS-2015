@@ -1,9 +1,55 @@
 """
 BIAS-2015 implementation of the ACMG 2015 germline pathogenic classifiers
 """
-from .constants import clinvar_review_status_to_level, score_to_hum_readable, loeuf_thresholds, pathogenic_thresholds
+import re
 
-def get_pvs(variant, gene_name_to_3prime_region, chrom_to_pos_to_alt_to_splice_score, skip_list):
+from .constants import clinvar_review_status_to_level, score_to_hum_readable, pathogenic_thresholds, ACMG_DEFAULT_AF_CUTOFFS
+from .vcep_lookup import get_vcep_rule
+from .mis_oe_moi_lookup import get_mis_oe_moi_cutoff
+
+
+_HGVSP_AA_POS_RE = re.compile(r'[A-Za-z]{1,3}(\d+)')
+
+
+def _pick_transcript_nmd_info(nmd_info_list, variant):
+    """
+    Choose the TranscriptNmdInfo entry that best matches the variant's primary
+    transcript. Falls back to the first entry when no match is found so PVS1 still
+    has coordinates to work with.
+    """
+    if not nmd_info_list:
+        return None
+    primary_id = None
+    if variant.transcriptList:
+        primary_id = variant.transcriptList[0].get('transcript')
+    if primary_id:
+        primary_stem = primary_id.split('.')[0]
+        for info in nmd_info_list:
+            if info.transcript_id.split('.')[0] == primary_stem:
+                return info
+    return nmd_info_list[0]
+
+
+def _extract_truncation_aa(variant):
+    """
+    Return the amino-acid position where translation is truncated, or None if it
+    cannot be parsed (e.g. splice variants with no HGVSp).
+
+    Handles the two BIAS-internal shorthand forms produced by
+    extract_from_nirvana_json.convert_mutation_format / extract_from_vep_json
+    (e.g. 'K1691fsN15*', 'R123*') and, as a fallback, raw HGVSp strings like
+    'NP_000050.2:p.(Lys1691AsnfsTer15)' or 'p.(Arg1234Ter)'.
+    """
+    for candidate in (variant.protein_variant, variant.hgvsp):
+        if not candidate or candidate == 'n/a':
+            continue
+        match = _HGVSP_AA_POS_RE.search(candidate)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def get_pvs(variant, gene_name_to_nmd_info, chrom_to_pos_to_alt_to_splice_score, skip_list):
     """
     Very strong evidence of pathogenicity
         PVS1    Null variants (nonsense, frameshift, canonical +/−1 or 2 splice sites, initiation
@@ -41,12 +87,34 @@ def get_pvs(variant, gene_name_to_3prime_region, chrom_to_pos_to_alt_to_splice_s
     if not valid_variant:
         return {'pvs1': (0, f"{variant.consequence} is not a LoF consequence")}
 
-    # Caveat 2: LOF variant is at the extreme 3' end of a gene (final 50 of last coding exon)
-    null_region = ('chr0', -10, -1)
-    prime_region = gene_name_to_3prime_region.get(variant.geneName, null_region)
-    _, prime_start, prime_end = prime_region
-    if prime_start <= int(variant.position) <= prime_end:
-        return {'pvs1': (0, f"Position {variant.position} is in the extreme three prime region ({prime_start}-{prime_end}) of the last coding exon in gene {variant.geneName}")}
+    # Caveat 2: variant is predicted to escape nonsense-mediated decay (PTC in the
+    # 3'-most exon or within the last 50 nt of the penultimate exon). Downgrade per
+    # the ClinGen SVI PVS1 decision tree (Abou Tayoun et al. 2018) based on how much
+    # of the protein is lost.
+    nmd_info_list = gene_name_to_nmd_info.get(variant.geneName, [])
+    transcript_info = _pick_transcript_nmd_info(nmd_info_list, variant)
+    pos = int(variant.position)
+    in_last_exon = False
+    in_penult_last50 = False
+    if transcript_info is not None:
+        le_start, le_end = transcript_info.last_exon_range
+        in_last_exon = le_start <= pos <= le_end
+        if transcript_info.penult_last50_range:
+            pe_start, pe_end = transcript_info.penult_last50_range
+            in_penult_last50 = pe_start <= pos <= pe_end
+    if in_last_exon or in_penult_last50:
+        zone = "last exon" if in_last_exon else "last 50 nt of penultimate exon"
+        trunc_aa = _extract_truncation_aa(variant)
+        total_aa = transcript_info.total_aa
+        if trunc_aa is None or total_aa == 0:
+            return {'pvs1': (3, f"PVS1_strong: NMD-escape ({zone}) in gene {variant.geneName}; "
+                                f"%-of-protein indeterminate for consequence {variant.consequence}.")}
+        pct_lost = (total_aa - trunc_aa) / total_aa
+        if pct_lost > 0.10:
+            return {'pvs1': (3, f"PVS1_strong: NMD-escape ({zone}) truncation removes {pct_lost:.1%} of protein "
+                                f"in gene {variant.geneName} (aa {trunc_aa}/{total_aa}).")}
+        return {'pvs1': (2, f"PVS1_moderate: NMD-escape ({zone}) truncation removes only {pct_lost:.1%} of protein "
+                            f"in gene {variant.geneName} (aa {trunc_aa}/{total_aa}).")}
 
     # Caveat 3: Check splice variants that lead to exon skipping but leave the remainder of the protein intact
     # One must also be cautious in assuming that a null variant will lead to disease if found in an exon where no
@@ -433,68 +501,100 @@ def get_pm1(variant, chrom_to_pathogenic_domain):
     return best_score, rationale
 
 
-def get_pm2(variant):
+def get_pm2(variant, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi=None):
     """
     PM2: Absent from controls (or at extremely low frequency if recessive)
          in Exome Sequencing Project, 1000 Genomes, or GnomAD.
-    
-    Uses LOEUF to determine appropriate AF thresholds. See constants file for more documentation.
 
-    PM2_Strong (3), PM2 (2), PM2_Supporting (1)
+    Three-step cutoff resolution:
+      1. VCEP rule (any strength, per CSpec registry).
+      2. Missense o/e upper × MOI (AD/AR) `PM2_Supporting` table row.
+      3. Data-derived fallback → PM2 Supporting
+         (AF < `ACMG_DEFAULT_AF_CUTOFFS["PM2_Supporting"]` = 0.0001%).
+
+    The mis_oe branch and the fallback both fire PM2 at **Supporting only** —
+    the historical LOEUF-driven PM2 (Strong) is intentionally retired outside of
+    the VCEP path.
     """
     pm2 = ""
     score = 0
+
+    # VCEP override for PM2 in this gene, if the CSpec registry has one. When the
+    # rule fires, it replaces the tiered PM2 evaluation entirely.
+    vcep_rule = get_vcep_rule(vcep_af_rules, variant.geneName, "PM2", variant)
+    if vcep_rule is not None:
+        if vcep_rule.strength == "NotApplicable":
+            return 0, f"PM2: VCEP {vcep_rule.gn_id} v{vcep_rule.version} marks PM2 Not Applicable for gene {variant.geneName}."
+        # Missing AN (0) fails the gate: without an AN we can't confirm the VCEP's evidence floor.
+        # If the gate fails, fall through to the mis_oe/MOI tier and then the flat fallback.
+        observed_an = variant.gnomad.get('allAn', 0) if variant.gnomad else 0
+        if not vcep_rule.min_allele_count or observed_an >= vcep_rule.min_allele_count:
+            # Pick the AF: popmax for popmax/grpmax/faf95; else max(gnomAD allAf, 0). Missing
+            # from gnomAD entirely is treated as AF=0 (variant absent from controls → PM2 fires).
+            af_source_label = "gnomAD allAf"
+            af_for_compare = variant.gnomad.get('allAf', 0) if variant.gnomad else 0
+            if vcep_rule.metric in ("popmax", "grpmax", "faf95"):
+                popmax_af = variant.gnomad.get('popmax') if variant.gnomad else None
+                if popmax_af is not None:
+                    af_for_compare = popmax_af
+                    af_source_label = "gnomAD popmax"
+            cmp = vcep_rule.comparator
+            threshold = vcep_rule.threshold
+            fires = (
+                (cmp == '>=' and af_for_compare >= threshold) or
+                (cmp == '>'  and af_for_compare >  threshold) or
+                (cmp == '<=' and af_for_compare <= threshold) or
+                (cmp == '<'  and af_for_compare <  threshold)
+            )
+            if fires:
+                strength_to_score = {"VeryStrong": 4, "Strong": 3, "Moderate": 2, "Supporting": 1}
+                score = strength_to_score.get(vcep_rule.strength, 1)
+                label = "PM2" if score == 3 else f"PM2_{score_to_hum_readable[score]}"
+                if threshold == 0:
+                    pm2 = (
+                        f"{label}: variant absent from controls ({af_source_label}={af_for_compare*100:.5f}%) "
+                        f"per VCEP {vcep_rule.gn_id} v{vcep_rule.version} for gene {variant.geneName}."
+                    )
+                else:
+                    pm2 = (
+                        f"{label}: {af_source_label}={af_for_compare*100:.5f}% {cmp} "
+                        f"VCEP {vcep_rule.gn_id} v{vcep_rule.version}-based threshold {threshold*100:.5f}% for gene {variant.geneName}."
+                    )
+            return score, pm2
 
     # Retrieve allele frequencies safely
     gnomad_af = variant.gnomad.get('allAf', 0) if variant.gnomad else None
     onekg_af = variant.oneKg.get('allAf', 0) if variant.oneKg else None
 
-    # Retrieve LOEUF safely, defaulting to 1.0 if missing
-    loeuf = variant.gene_gnomad.get('loeuf', 1.0) if variant.gene_gnomad else 1.0
-
-    # Determine PM2 cutoff based on LOEUF
-    pop_thresholds = {}
-    for loeuf_tier in loeuf_thresholds:
-        if loeuf < loeuf_tier['max_loeuf']:
-            pop_thresholds = loeuf_tier
-            break
-    pm2_cutoff_supporting = pop_thresholds['pm2_cutoff']
-    pm2_cutoff_strong = pop_thresholds['pm2_cutoff_strong']
-    
-    # 1. **Variant is entirely missing in both GnomAD and 1000 Genomes**
+    # Variant entirely missing in both gnomAD and 1000 Genomes → PM2 Supporting fires unconditionally.
     if not variant.gnomad and not variant.oneKg:
-        score = 1
-        pm2 = "PM2: Variant is absent from both GnomAD and 1000 Genomes."
-        return score, pm2
+        return 1, "PM2_Supporting: Variant is absent from both GnomAD and 1000 Genomes."
 
-    # 2. **Variant is found in both but at extremely low AF**
-    loeuf_str = f"({variant.geneName}:{loeuf})"
+    # Level 2: mis_oe × MOI stratified PM2_Supporting cutoff.
+    resolved = get_mis_oe_moi_cutoff(mis_oe_moi_af_cutoffs, variant, "PM2_Supporting", gene_to_moi)
+    if resolved is not None:
+        pm2_cutoff, moi, bin_lo, oe_mis = resolved
+        source_label = f"mis_oe_upper({variant.geneName}:{oe_mis:.4f}, MOI={moi}, bin>={bin_lo:.2f})"
+    else:
+        pm2_cutoff = ACMG_DEFAULT_AF_CUTOFFS["PM2_Supporting"]
+        source_label = "ACMG default"
+
     if variant.gnomad and variant.oneKg:
         max_af = max(gnomad_af, onekg_af)
-        if max_af < pm2_cutoff_supporting:
-            score = 2
-            pm2 = f"PM2_{score_to_hum_readable[score]}: Both GnomAD {gnomad_af*100:.5f}% and 1000 Genomes {onekg_af*100:.5f}% are below " + \
-                    f"LOEUF{loeuf_str}-based threshold {pm2_cutoff_supporting*100:.5f}%."
-        if max_af < pm2_cutoff_strong: 
-            score = 3
-            pm2 = f"PM2: Both GnomAD {gnomad_af*100:.5f}% and 1000 Genomes {onekg_af*100:.5f}% are below " + \
-                    f"LOEUF{loeuf_str}-based threshold {pm2_cutoff_strong*100:.5f}%."
-    # 3. **Variant is found in 1k**
+        if max_af < pm2_cutoff:
+            score = 1
+            pm2 = (f"PM2_Supporting: Both GnomAD {gnomad_af*100:.5f}% and 1000 Genomes {onekg_af*100:.5f}% "
+                   f"are below {source_label}-based threshold {pm2_cutoff*100:.5f}%.")
     elif variant.oneKg:
-        if onekg_af < pm2_cutoff_supporting:
-            score = 2
-            pm2 = f"PM2_{score_to_hum_readable[score]}: 1000 Genomes {onekg_af*100:.5f}% is below LOEUF{loeuf_str}-based threshold {pm2_cutoff_supporting*100:.5f}%."
-        if onekg_af < pm2_cutoff_strong: 
-            score = 3
-            pm2 = f"PM2: 1000 Genomes {onekg_af*100:.5f}% is below LOEUF{loeuf_str}-based threshold {pm2_cutoff_strong*100:.5f}%."
-    # 4. **Variant is found in Gnomad**
+        if onekg_af < pm2_cutoff:
+            score = 1
+            pm2 = (f"PM2_Supporting: 1000 Genomes {onekg_af*100:.5f}% is below "
+                   f"{source_label}-based threshold {pm2_cutoff*100:.5f}%.")
     else:
-        if gnomad_af < pm2_cutoff_supporting:
-            score = 2
-            pm2 = f"PM2_{score_to_hum_readable[score]}: gnomAD {gnomad_af*100:.5f}% is below LOEUF{loeuf_str}-based threshold {pm2_cutoff_supporting*100:.5f}%."
-        if gnomad_af < pm2_cutoff_strong: 
-            score = 3
-            pm2 = f"PM2: gnomAD {gnomad_af*100:.5f}% is below LOEUF{loeuf_str}-based threshold {pm2_cutoff_strong*100:.5f}%."
+        if gnomad_af < pm2_cutoff:
+            score = 1
+            pm2 = (f"PM2_Supporting: gnomAD {gnomad_af*100:.5f}% is below "
+                   f"{source_label}-based threshold {pm2_cutoff*100:.5f}%.")
     return score, pm2
 
 
@@ -695,7 +795,7 @@ def get_pm6():
 
 
 def get_pm(variant, chrom_to_repeat_regions, gene_aa_to_var_data, chrom_to_pathogenic_domain, gene_mut_to_data,
-           chrom_to_pos_to_alt_to_splice_score, skip_list):
+           chrom_to_pos_to_alt_to_splice_score, skip_list, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi=None):
     """
     Moderate evidence of pathogenicity
         PM1    Located in a mutational hot spot and/or critical and well-established
@@ -723,7 +823,7 @@ def get_pm(variant, chrom_to_repeat_regions, gene_aa_to_var_data, chrom_to_patho
         pm1 = ""
 
     if "pm2" not in skip_list:
-        score_2, pm2 = get_pm2(variant)
+        score_2, pm2 = get_pm2(variant, vcep_af_rules, mis_oe_moi_af_cutoffs, gene_to_moi)
     else:
         score_2 = 0
         pm2 = ""
@@ -923,10 +1023,7 @@ def get_pp3(variant, chrom_to_pos_to_alt_to_splice_score):
             if variant.alphamissense_score >= pathogenic_thresholds['pp3_alphamissense_supporting']:
                 am_weight = "supporting"
                 alg_to_score['alphamissense'] = 1
-                if variant.alphamissense_score >= pathogenic_thresholds['pp3_alphamissense_very_strong']:
-                    am_weight = "very-strong"
-                    alg_to_score['alphamissense'] = 4
-                elif variant.alphamissense_score >= pathogenic_thresholds['pp3_alphamissense_strong']:
+                if variant.alphamissense_score >= pathogenic_thresholds['pp3_alphamissense_strong']:
                     am_weight = "strong"
                     alg_to_score['alphamissense'] = 3
                 elif variant.alphamissense_score >= pathogenic_thresholds['pp3_alphamissense_moderate']:

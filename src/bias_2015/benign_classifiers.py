@@ -1,17 +1,19 @@
 """
 BIAS-2015 implementation of the ACMG 2015 germline benign classifiers
 """
-from .constants import clinvar_review_status_to_level, score_to_hum_readable, loeuf_thresholds, benign_thresholds
+from .constants import clinvar_review_status_to_level, score_to_hum_readable, loeuf_thresholds, benign_thresholds, ACMG_DEFAULT_AF_CUTOFFS
+from .vcep_lookup import get_vcep_rule
+from .mis_oe_moi_lookup import get_mis_oe_moi_cutoff
 
-def get_ba1(variant):
+def get_ba1(variant, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi=None):
     """
     BA1: Stand-Alone Evidence of Benign Impact
          A variant is classified as BA1 if its allele frequency (AF) is above a gene-specific threshold.
-         The default threshold is 5%, but this is adjusted based on LOEUF from GnomAD.
-    
-    BIAS uses LOEUF modulated AF cutoff values, see constants.py for the values set. 
 
-    ** ExAC has been replaced by GnomAD **
+    Three-step cutoff resolution:
+      1. VCEP rule from the ClinGen Criteria Specification Registry (per-gene override).
+      2. Missense o/e upper × MOI (AD/AR) stratified table (`mis_oe_upper_binned_cutoffs.tsv`).
+      3. Data-derived fallback (`ACMG_DEFAULT_AF_CUTOFFS["BA1"]` = 0.1%).
     """
     ba1 = ""
     score = 0
@@ -21,28 +23,48 @@ def get_ba1(variant):
     gnomad_af = variant.gnomad.get('allAf', 0) if variant.gnomad else 0
     highest_af = max(onekg_af, gnomad_af)
 
-    loeuf = variant.gene_gnomad.get('loeuf', 1) if hasattr(variant, 'gene_gnomad') and variant.gene_gnomad else 1
+    # Default (level 3): ACMG BA1 threshold.
+    ba1_cutoff = ACMG_DEFAULT_AF_CUTOFFS["BA1"]
+    threshold_source_label = "ACMG default"
 
-    # Determine BA1 cutoff based on LOEUF
-    pop_thresholds = {}
-    for loeuf_tier in loeuf_thresholds:
-        if loeuf < loeuf_tier['max_loeuf']:
-            pop_thresholds = loeuf_tier
-            break
-    ba1_cutoff = pop_thresholds['ba1_cutoff']
-    
-    loeuf_str = f"({variant.geneName}:{loeuf})"
+    # Level 2: mis_oe × MOI stratified table.
+    resolved = get_mis_oe_moi_cutoff(mis_oe_moi_af_cutoffs, variant, "BA1", gene_to_moi)
+    if resolved is not None:
+        cutoff, moi, bin_lo, oe_mis = resolved
+        ba1_cutoff = cutoff
+        threshold_source_label = f"mis_oe_upper({variant.geneName}:{oe_mis:.4f}, MOI={moi}, bin>={bin_lo:.2f})"
+
+    # Level 1: VCEP override.
+    vcep_rule = get_vcep_rule(vcep_af_rules, variant.geneName, "BA1", variant)
+    if vcep_rule is not None:
+        if vcep_rule.strength == "NotApplicable":
+            return 0, f"BA1: VCEP {vcep_rule.gn_id} v{vcep_rule.version} marks BA1 Not Applicable for gene {variant.geneName}."
+        # Skip the VCEP rule if it requires a minimum gnomAD allele count the variant lacks.
+        # Missing AN (0) fails the gate: without an AN we can't confirm the VCEP's evidence floor.
+        observed_an = variant.gnomad.get('allAn', 0) if variant.gnomad else 0
+        if not vcep_rule.min_allele_count or observed_an >= vcep_rule.min_allele_count:
+            # VCEP metrics popmax/grpmax/faf95 use variant.gnomad['popmax'] (computed at
+            # extraction time). Fall back to raw_af if popmax isn't populated.
+            if vcep_rule.metric in ("popmax", "grpmax", "faf95"):
+                popmax_af = variant.gnomad.get('popmax') if variant.gnomad else None
+                if popmax_af is not None:
+                    highest_af = popmax_af
+                    onekg_af = 0
+                    gnomad_af = popmax_af
+            ba1_cutoff = vcep_rule.threshold
+            threshold_source_label = f"VCEP {vcep_rule.gn_id} v{vcep_rule.version}"
+
     # Check if the variant exceeds the BA1 threshold
     if highest_af > ba1_cutoff:
         score = 5
         source = "both One Thousand Genomes & GnomAD" if onekg_af > ba1_cutoff and gnomad_af > ba1_cutoff else \
                  "One Thousand Genomes" if onekg_af > ba1_cutoff else "GnomAD"
         ba1 = f"BA1: {source} general population AF={highest_af*100:.5f}% exceeds " + \
-                f"LOEUF{loeuf_str}-based threshold ({ba1_cutoff*100:.5f}%) based on LOEUF={loeuf:.5f}."
+                f"{threshold_source_label}-based threshold ({ba1_cutoff*100:.5f}%)."
 
     return score, ba1
 
-def get_ba(variant, skip_list):
+def get_ba(variant, skip_list, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi=None):
     """
     AMP/ACMG
     Stand-Alone evidence of benign impact
@@ -52,65 +74,105 @@ def get_ba(variant, skip_list):
     ** ExAC has been replaced by Gnomad **
     """
     if 'ba1' not in skip_list:
-        ba1_score, ba1 = get_ba1(variant)
+        ba1_score, ba1 = get_ba1(variant, vcep_af_rules, mis_oe_moi_af_cutoffs, gene_to_moi)
     else:
         ba1_score = 0
         ba1 = ""
     ba_rationale_list = {'ba1': (ba1_score, ba1)}
     return ba_rationale_list
 
-def get_bs1(variant):
+def get_bs1(variant, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi=None):
     """
     BS1: Allele frequency is greater than expected for disorder.
-    
-    - BS1 applies if AF is above expected but below BA1 cutoff.
-    - For very low cutoffs, a minimum allele count (AC) is also required.
-    
-    evRepo assigns the following weights:
-    - BS1 (3) = Strong
-    - BS1_Supporting (1) = Supporting
+
+    Three-step cutoff resolution:
+      1. VCEP rule → use its threshold + strength.
+      2. Missense o/e upper × MOI (AD/AR) table → BS1 Strong / BS1_Moderate / BS1_Supporting rows.
+      3. Data-derived fallback → BS1 Strong / Moderate / Supporting from
+         `ACMG_DEFAULT_AF_CUTOFFS` (0.05% / 0.005% / 0.001%).
+
+    evRepo strengths: BS1 (3) = Strong, BS1_Moderate (2), BS1_Supporting (1).
     """
     bs1 = ""
     score = 0
 
-    # Retrieve allele frequencies and counts safely
+    # Retrieve allele frequencies safely
     onekg_af = variant.oneKg.get('allAf', 0) if variant.oneKg else 0
     gnomad_af = variant.gnomad.get('allAf', 0) if variant.gnomad else 0
     highest_af = max(onekg_af, gnomad_af)
 
-    # Retrieve LOEUF safely
-    loeuf = variant.gene_gnomad.get('loeuf', 1.0) if hasattr(variant, 'gene_gnomad') and variant.gene_gnomad else 1.0
+    # VCEP override — replaces both levels 2 and 3 for BS1.
+    vcep_rule = get_vcep_rule(vcep_af_rules, variant.geneName, "BS1", variant)
+    if vcep_rule is not None:
+        if vcep_rule.strength == "NotApplicable":
+            return 0, f"BS1: VCEP {vcep_rule.gn_id} v{vcep_rule.version} marks BS1 Not Applicable for gene {variant.geneName}."
+        # Missing AN (0) fails the gate: without an AN we can't confirm the VCEP's evidence floor.
+        # If the gate fails, fall through to the mis_oe/MOI tier and then the flat fallback.
+        observed_an = variant.gnomad.get('allAn', 0) if variant.gnomad else 0
+        if not vcep_rule.min_allele_count or observed_an >= vcep_rule.min_allele_count:
+            af_for_compare = highest_af
+            af_source_label = "general population AF"
+            if vcep_rule.metric in ("popmax", "grpmax", "faf95"):
+                popmax_af = variant.gnomad.get('popmax') if variant.gnomad else None
+                if popmax_af is not None:
+                    af_for_compare = popmax_af
+                    af_source_label = "gnomAD popmax"
+            cmp = vcep_rule.comparator
+            threshold = vcep_rule.threshold
+            fires = (
+                (cmp == '>=' and af_for_compare >= threshold) or
+                (cmp == '>'  and af_for_compare >  threshold) or
+                (cmp == '<=' and af_for_compare <= threshold) or
+                (cmp == '<'  and af_for_compare <  threshold)
+            )
+            if fires:
+                strength_to_score = {"StandAlone": 5, "VeryStrong": 4, "Strong": 3, "Moderate": 2, "Supporting": 1}
+                score = strength_to_score.get(vcep_rule.strength, 3)
+                label = "BS1" if score == 3 else f"BS1_{score_to_hum_readable[score]}"
+                bs1 = (
+                    f"{label}: {af_source_label}={af_for_compare*100:.5f}% {cmp} "
+                    f"VCEP {vcep_rule.gn_id} v{vcep_rule.version}-based threshold {threshold*100:.5f}% for gene {variant.geneName}."
+                )
+            return score, bs1
 
-    # Determine BS1 cutoffs based on LOEUF
-    pop_thresholds = {}
-    for loeuf_tier in loeuf_thresholds:
-        if loeuf < loeuf_tier['max_loeuf']:
-            pop_thresholds = loeuf_tier
-            break
-    ba1_cutoff = pop_thresholds['ba1_cutoff']
-    bs1_cutoff_strong = pop_thresholds['bs1_cutoff_strong']
-    bs1_cutoff_supporting= pop_thresholds['bs1_cutoff']
-    
-    # Ensure a variant **cannot** qualify for both BA1 and BS1
-    if highest_af >= ba1_cutoff:
-        return 0, ""  # Variant already meets BA1 criteria, so BS1 should not be applied
+    # Level 2: mis_oe × MOI stratified BS1 (Strong / Moderate / Supporting) if the gene is covered.
+    strong = get_mis_oe_moi_cutoff(mis_oe_moi_af_cutoffs, variant, "BS1", gene_to_moi)
+    if strong is not None:
+        moderate = get_mis_oe_moi_cutoff(mis_oe_moi_af_cutoffs, variant, "BS1_Moderate", gene_to_moi)
+        supporting = get_mis_oe_moi_cutoff(mis_oe_moi_af_cutoffs, variant, "BS1_Supporting", gene_to_moi)
+        strong_cutoff, moi, bin_lo, oe_mis = strong
+        source_label = f"mis_oe_upper({variant.geneName}:{oe_mis:.4f}, MOI={moi}, bin>={bin_lo:.2f})"
+        if highest_af > strong_cutoff:
+            score = 3
+            bs1 = (f"BS1: general population AF={highest_af*100:.5f}% exceeds "
+                   f"{source_label}-based Strong threshold {strong_cutoff*100:.5f}%.")
+        elif moderate is not None and highest_af > moderate[0]:
+            score = 2
+            bs1 = (f"BS1_Moderate: general population AF={highest_af*100:.5f}% exceeds "
+                   f"{source_label}-based Moderate threshold {moderate[0]*100:.5f}%.")
+        elif supporting is not None and highest_af > supporting[0]:
+            score = 1
+            bs1 = (f"BS1_Supporting: general population AF={highest_af*100:.5f}% exceeds "
+                   f"{source_label}-based Supporting threshold {supporting[0]*100:.5f}%.")
+        return score, bs1
 
-    loeuf_str = f"({variant.geneName}:{loeuf})"
-    # Apply BS1 based on gene-specific cutoffs and AC validation
-    if highest_af > bs1_cutoff_strong:
-        score = 3  # BS1 (Strong)
-        source = "both One Thousand Genomes & GnomAD" if onekg_af > bs1_cutoff_supporting and gnomad_af > bs1_cutoff_supporting else \
-                 "One Thousand Genomes" if onekg_af > bs1_cutoff_supporting else "GnomAD"
-        bs1 = f"BS1: {source} general population AF={highest_af*100:.5f}% is between LOEUF{loeuf_str}-based thresholds " + \
-                f"{bs1_cutoff_supporting*100:.5f}% and {bs1_cutoff_strong*100:.5f}%"
-
-    elif highest_af > bs1_cutoff_supporting:
-        score = 1  # BS1_Supporting
-        source = "both One Thousand Genomes & GnomAD" if onekg_af > bs1_cutoff_supporting and gnomad_af > bs1_cutoff_supporting else \
-                 "One Thousand Genomes" if onekg_af > bs1_cutoff_supporting else "GnomAD"
-        bs1 = f"BS1_{score_to_hum_readable[score]}: {source} general population AF={highest_af*100:.5f}%" + \
-                f" exceeds LOEUF{loeuf_str}-based threshold {bs1_cutoff_supporting*100:.5f}%"
-
+    # Level 3: data-derived fallback (median cutoffs of the mis_oe/MOI table). Fires Strong /
+    # Moderate / Supporting like the mis_oe branch.
+    strong_default = ACMG_DEFAULT_AF_CUTOFFS["BS1_Strong"]
+    moderate_default = ACMG_DEFAULT_AF_CUTOFFS["BS1_Moderate"]
+    supporting_default = ACMG_DEFAULT_AF_CUTOFFS["BS1_Supporting"]
+    if highest_af > strong_default:
+        score = 3
+        bs1 = (f"BS1: general population AF={highest_af*100:.5f}% exceeds "
+               f"fallback Strong threshold {strong_default*100:.5f}%.")
+    elif highest_af > moderate_default:
+        score = 2
+        bs1 = (f"BS1_Moderate: general population AF={highest_af*100:.5f}% exceeds "
+               f"fallback Moderate threshold {moderate_default*100:.5f}%.")
+    elif highest_af > supporting_default:
+        score = 1
+        bs1 = (f"BS1_Supporting: general population AF={highest_af*100:.5f}% exceeds "
+               f"fallback Supporting threshold {supporting_default*100:.5f}%.")
     return score, bs1
 
 def get_bs2(variant):
@@ -199,7 +261,7 @@ def get_bs4():
     return ""
 
 
-def get_bs(variant, skip_list):
+def get_bs(variant, skip_list, vcep_af_rules=None, ba1_applied=False, mis_oe_moi_af_cutoffs=None, gene_to_moi=None):
     """
     Strong evidence of benign impact
         BS1    Allele frequency is greater than expected for disorder (see table 6)
@@ -212,7 +274,7 @@ def get_bs(variant, skip_list):
                effect on protein function or splicing
 
         BS4    Lack of segregation in affected members of a family
-                
+
                Caveat: The presence of phenocopies for common phenotypes (i.e. cancer,
                        epilepsy) can mimic lack of segregation among affected individuals. Also,
                        families may have more than one pathogenic variants contributing to an
@@ -220,8 +282,8 @@ def get_bs(variant, skip_list):
                        segregation.
     """
 
-    if "bs1" not in skip_list:
-        bs1_score, bs1 = get_bs1(variant)
+    if "bs1" not in skip_list and not ba1_applied:
+        bs1_score, bs1 = get_bs1(variant, vcep_af_rules, mis_oe_moi_af_cutoffs, gene_to_moi)
     else:
         bs1_score = 0
         bs1 = ""

@@ -48,3 +48,8 @@ Thumbs.db
 *.mov
 *.wmv
 
+# Local validation / analysis scratch dirs (large TSVs, Nirvana JSON, per-user paths JSON)
+/clinvar_eval/
+/erepo_baseline/
+/erepo_updated/
+

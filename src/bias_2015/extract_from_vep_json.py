@@ -22,6 +22,7 @@ import sys
 import traceback
 from src.bias_2015.variant_data import VariantData, open_file
 from src.bias_2015 import bias_variant_classification
+from src.bias_2015.vcep_lookup import compute_popmax
 
 
 # Mapping table for three-letter to single-letter amino acids
@@ -201,6 +202,11 @@ def extract_gnomad_from_colocated(colocated_variants, alt_allele):
         # If we found gnomAD data, no need to check more colocated variants
         if gnomad:
             break
+
+    if gnomad:
+        popmax = compute_popmax(gnomad)
+        if popmax is not None:
+            gnomad["popmax"] = popmax
 
     return gnomad
 

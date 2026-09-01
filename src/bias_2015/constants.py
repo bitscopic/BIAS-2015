@@ -51,7 +51,9 @@ clinvar_review_status_to_level = {
 # Existing content remains unchanged, adding new constants below:
 
 benign_thresholds = {
-    # BA1, BS1, and BS2 have LOEUF dependent cutoff values, please see futher below
+    # BS2 uses LOEUF-tiered count/AF thresholds (see loeuf_thresholds below).
+    # BA1 and BS1 use ACMG_DEFAULT_AF_CUTOFFS as the fallback, layered under the
+    # VCEP → mis_oe × MOI cascade (see mis_oe_moi_lookup).
 
     # BP3 in-frame deletion/insertion length thresholds from ACMG guidelines and ClinGen expert panel standards
     "bp3_in_frame_max_length": 60,     # Maximum in-frame length for BP3 (19 amino acids)
@@ -170,85 +172,83 @@ pathogenic_thresholds = {
     # AlphaMissense PP3 thresholds from Bergquist et al. Genet Med 2025, Table 2
     "pp3_alphamissense_supporting": 0.792,   # Supporting pathogenic threshold
     "pp3_alphamissense_moderate": 0.906,     # Moderate pathogenic threshold
-    "pp3_alphamissense_strong": 0.972,       # Strong pathogenic threshold
-    "pp3_alphamissense_very_strong": 0.99,   # Very strong pathogenic threshold
+    "pp3_alphamissense_strong": 0.99,       # Strong pathogenic threshold
 
     # PP5 thresholds for using clinvar evidence
     "pp5_clinvar_minimum_review": 1,
 }
 
 
-# LOEUF (Loss-of-Function Observed/Expected Upper Bound Fraction) measures how tolerant a gene is to loss-of-function 
-# variants, with lower values indicating stronger selection against LoF variants and higher values indicating greater tolerance.
+# Fallback AF cutoffs used by BA1/BS1/PM2 when neither a VCEP rule nor the missense o/e × MOI
+# stratified table (see mis_oe_moi_lookup) covers the gene.
 #
-# Highly constrained genes (low LOEUF) are more likely to have pathogenic variants → BA1 should be harder to trigger 
-# (higher AF threshold) to avoid false benign calls, PM2 should be easier to trigger (higher AF threshold) to detect
-# more variants.
+# Values are data-derived from mis_oe_upper_binned_cutoffs.tsv rather than the historical flat
+# ACMG 2015 defaults (BA1 5%, BS1 0.1%, PM2 0.1%). The plain 5% BA1 threshold was empirically
+# too permissive: it left many true benigns in VUS in the fallback path because their AF sat in
+# the 0.1%–5% band. The tightened BA1 (0.1%) and stratified BS1 tiers below reflect the
+# AD/AR-stratified evidence in the mis_oe table.
 #
-# Unconstrained genes (high LOEUF) are less likely to have pathogenic variants → BA1 should be easier to trigger 
-# (lower AF threshold) to avoid false benign calls, PM2 should be harder to trigger (low AF threshold) to detect
-# less variants
+# BS1 fires at three strengths in this fallback path (Strong / Moderate / Supporting), matching
+# the mis_oe/MOI branch. PM2 fires at Supporting only, matching the mis_oe/MOI branch. The
+# PM2_Supporting cutoff sits a full order of magnitude below BS1_Supporting so the two never
+# overlap.
+ACMG_DEFAULT_AF_CUTOFFS = {
+    "BA1":             0.001,    # 0.1%
+    "BS1_Strong":      0.0005,   # 0.05%
+    "BS1_Moderate":    0.00005,  # 0.005%
+    "BS1_Supporting":  0.00001,  # 0.001%
+    "PM2_Supporting":  0.000001, # 0.0001% (fires when AF < this)
+}
+
+
+# LOEUF (Loss-of-Function Observed/Expected Upper Bound Fraction) from gnomAD measures how
+# tolerant a gene is to loss-of-function variation. Lower values → stronger selection against LoF.
+#
+# BIAS uses LOEUF in two places today:
+#   1. PVS1 (pathogenic_classifiers.get_pvs1) reads the raw per-gene LOEUF to downgrade the
+#      strength when the gene is LoF-tolerant (loeuf > 1.0).
+#   2. BS2 (benign_classifiers.get_bs2) uses the tiered table below for observed-count
+#      thresholds by inheritance mode (recessive homozygous / dominant allele / X-linked) and
+#      an AF gate on the dominant branch.
+#
+# BA1, BS1, and PM2 no longer read this table. Their AF cutoffs come from the cascade in
+# vcep_lookup.get_vcep_rule → mis_oe_moi_lookup.get_mis_oe_moi_cutoff → ACMG_DEFAULT_AF_CUTOFFS.
 loeuf_thresholds = [
-    { # Very highly constrained genes
-        "max_loeuf": 0.05, 
-        "ba1_cutoff": 0.05, 
-        "bs1_cutoff_strong": 0.02, 
-        "bs1_cutoff": 0.01, 
-        "pm2_cutoff": 0.001, 
-        "pm2_cutoff_strong": 0.0005, 
-        "bs2_recessive_homozygous_threshold": 8, 
-        "bs2_dominant_allele_threshold": 8, 
-        "bs2_xlinked_threshold": 8, 
-        "bs2_af_threshold": 2e-5
+    {  # Very highly constrained genes
+        "max_loeuf": 0.05,
+        "bs2_recessive_homozygous_threshold": 8,
+        "bs2_dominant_allele_threshold": 8,
+        "bs2_xlinked_threshold": 8,
+        "bs2_af_threshold": 2e-5,
     },
-    { # Strongly constrained genes
-        "max_loeuf": 0.2, 
-        "ba1_cutoff": 0.01, 
-        "bs1_cutoff_strong": 0.002, 
-        "bs1_cutoff": 0.001, 
-        "pm2_cutoff": 0.0005, 
-        "pm2_cutoff_strong": 0.00025, 
-        "bs2_recessive_homozygous_threshold": 6, 
-        "bs2_dominant_allele_threshold": 6, 
-        "bs2_xlinked_threshold": 6, 
-        "bs2_af_threshold": 5e-5
+    {  # Strongly constrained genes
+        "max_loeuf": 0.2,
+        "bs2_recessive_homozygous_threshold": 6,
+        "bs2_dominant_allele_threshold": 6,
+        "bs2_xlinked_threshold": 6,
+        "bs2_af_threshold": 5e-5,
     },
-    { # Moderately constrained genes
+    {  # Moderately constrained genes
         "max_loeuf": 0.5,
-        "ba1_cutoff": 0.0025, 
-        "bs1_cutoff_strong": 0.0002, 
-        "bs1_cutoff": 0.0001, 
-        "pm2_cutoff": 0.00001, 
-        "pm2_cutoff_strong": 0.000001, 
-        "bs2_recessive_homozygous_threshold": 5, 
-        "bs2_dominant_allele_threshold": 5, 
-        "bs2_xlinked_threshold": 5, 
-        "bs2_af_threshold": 5e-4
-    },
-    { # Weakly constrained genes
-        "max_loeuf": 1.0,
-        "ba1_cutoff": 0.0025, 
-        "bs1_cutoff_strong": 0.0004, 
-        "bs1_cutoff": 0.0002, 
-        "pm2_cutoff": 0.00001, 
-        "pm2_cutoff_strong": 0.000001, 
-        "bs2_recessive_homozygous_threshold": 3, 
-        "bs2_xlinked_threshold": 3, 
+        "bs2_recessive_homozygous_threshold": 5,
+        "bs2_dominant_allele_threshold": 5,
+        "bs2_xlinked_threshold": 5,
         "bs2_af_threshold": 5e-4,
-        "bs2_dominant_allele_threshold": 3
     },
-    { # Tolerant genes (default)
-        "max_loeuf": 100.0, 
-        "ba1_cutoff": 0.0025, 
-        "bs1_cutoff_strong": 0.0004, 
-        "bs1_cutoff": 0.0002, 
-        "pm2_cutoff": 0.00001, 
-        "pm2_cutoff_strong": 0.000001, 
-        "bs2_recessive_homozygous_threshold": 2, 
-        "bs2_xlinked_threshold": 2, 
-        "bs2_af_threshold": 5e-4, 
-        "bs2_dominant_allele_threshold": 2
-    }
+    {  # Weakly constrained genes
+        "max_loeuf": 1.0,
+        "bs2_recessive_homozygous_threshold": 3,
+        "bs2_dominant_allele_threshold": 3,
+        "bs2_xlinked_threshold": 3,
+        "bs2_af_threshold": 5e-4,
+    },
+    {  # Tolerant genes (default)
+        "max_loeuf": 100.0,
+        "bs2_recessive_homozygous_threshold": 2,
+        "bs2_dominant_allele_threshold": 2,
+        "bs2_xlinked_threshold": 2,
+        "bs2_af_threshold": 5e-4,
+    },
 ]
 
 

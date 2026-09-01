@@ -18,8 +18,9 @@ from src.preprocessing import (
         join_coding_and_repeats,
         find_missense_pathogenic_genes_and_path_trunc_genes,
         generate_domain_lists,
-        generate_submitter_counts
+        generate_vcep_af_cutoffs,
 )
+from src.preprocessing.generate_clinvar_submitter_counts import generate_submitter_counts
 
 # Supported annotators
 SUPPORTED_ANNOTATORS = ['nirvana', 'vep', 'all']
@@ -499,6 +500,15 @@ def main():
     repeat_output = os.path.join(output_dir, f"{ref_b}_PM4_BP3_coding_repeat_regions.tsv")
     missense_output = os.path.join(output_dir, f"{ref_b}_PP2_missense_pathogenic_genes.tsv")
     truncating_output = os.path.join(output_dir, f"{ref_b}_BP1_truncating_genes.tsv")
+    # VCEP AF cutoffs are gene-only (build-agnostic) and committed to the repo at
+    # data/vcep/. Rerunning preprocessing refreshes the committed snapshot in place.
+    _repo_root = os.path.abspath(os.path.dirname(__file__))
+    vcep_af_output = os.path.join(_repo_root, "data", "vcep", "vcep_af_cutoffs.tsv")
+    vcep_af_review = os.path.join(_repo_root, "data", "vcep", "vcep_af_cutoffs_review.tsv")
+    # Derived m o/e × MOI binned AF cutoffs and the MOI lookup are also gene-only
+    # (build-agnostic) and ship committed under data/af_cutoffs/.
+    mis_oe_moi_af_cutoffs_file = os.path.join(_repo_root, "data", "af_cutoffs", "mis_oe_upper_binned_cutoffs.tsv")
+    gene_to_moi_file = os.path.join(_repo_root, "data", "af_cutoffs", "gene_to_moi.tsv")
 
     # VEP-only: ClinVar submission-level data for PS4 submitter counts
     clinvar_submission_summary_gz = os.path.join(output_dir, "submission_summary.txt.gz")
@@ -563,10 +573,28 @@ def main():
             run_command(f"wget -O {download_file} {clingen_download_url}")
         shutil.copy(download_file, clingen_file)
 
-    # Download gnomAD gene constraint metrics (BS2, LOEUF thresholds)
+    # Download gnomAD gene constraint metrics. Consumed by PVS1 (raw LOEUF drives
+    # strength adjustment) and BS2 (LOEUF-tiered observed-count thresholds).
     if not skip_if_exists(gnomad_constraints_file, "gnomAD Gene Constraints"):
-        logging.info("Downloading gnomAD gene constraint metrics... (BS2, LOEUF)")
+        logging.info("Downloading gnomAD gene constraint metrics... (PVS1 LOEUF, BS2 count tiers)")
         download_and_extract(gnomad_constraints_download_url, gnomad_constraints_file)
+
+    # Fetch CSpec VCEP AF cutoffs (BA1, BS1, PM2 gene-specific overrides)
+    if not skip_if_exists(vcep_af_output, "CSpec VCEP AF cutoffs (BA1/BS1/PM2)"):
+        logging.info("Fetching VCEP AF cutoffs from ClinGen CSpec... (BA1/BS1/PM2)")
+        import sys as _sys
+        _orig_argv = _sys.argv
+        _sys.argv = [
+            "generate_vcep_af_cutoffs.py",
+            "--output", vcep_af_output,
+            "--review-output", vcep_af_review,
+            "--allow-unparseable",
+            "--verbose", "WARNING",
+        ]
+        try:
+            generate_vcep_af_cutoffs.main()
+        finally:
+            _sys.argv = _orig_argv
 
     # ── Annotator-specific steps: PS1/PM5 AA extraction and PS4 submitter counts ──
     # These are the only steps that differ between annotators. When --annotator all,
@@ -613,6 +641,9 @@ def main():
             "BP1_truncating_gene_to_data_fp": truncating_output,
             "BS2_clingen_gene_disease_validity_fp": clingen_file,
             "PVS1_PM2_BA1_BS1_BS2_gnomad_gene_constraints_fp": gnomad_constraints_file,
+            "BA1_BS1_PM2_vcep_af_cutoffs_fp": vcep_af_output,
+            "BA1_BS1_PM2_mis_oe_moi_af_cutoffs_fp": mis_oe_moi_af_cutoffs_file,
+            "BA1_BS1_PM2_gene_to_moi_fp": gene_to_moi_file,
         }
         if ann == 'vep':
             paths["PS4_clinvar_submitter_counts_fp"] = clinvar_submitter_counts_output
