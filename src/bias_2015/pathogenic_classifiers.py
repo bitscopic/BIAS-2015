@@ -443,9 +443,10 @@ def get_pm2(variant, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi
     Three-step cutoff resolution:
       1. VCEP rule (any strength, per CSpec registry).
       2. Missense o/e upper × MOI (AD/AR) `PM2_Supporting` table row.
-      3. Plain ACMG-2015 default → PM2 Supporting (AF < 0.001).
+      3. Data-derived fallback → PM2 Supporting
+         (AF < `ACMG_DEFAULT_AF_CUTOFFS["PM2_Supporting"]` = 0.0001%).
 
-    The mis_oe branch and the ACMG fallback both fire PM2 at **Supporting only** —
+    The mis_oe branch and the fallback both fire PM2 at **Supporting only** —
     the historical LOEUF-driven PM2 (Strong) is intentionally retired outside of
     the VCEP path.
     """
@@ -458,41 +459,42 @@ def get_pm2(variant, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi
     if vcep_rule is not None:
         if vcep_rule.strength == "NotApplicable":
             return 0, f"PM2: VCEP {vcep_rule.gn_id} v{vcep_rule.version} marks PM2 Not Applicable for gene {variant.geneName}."
+        # Missing AN (0) fails the gate: without an AN we can't confirm the VCEP's evidence floor.
+        # If the gate fails, fall through to the mis_oe/MOI tier and then the flat fallback.
         observed_an = variant.gnomad.get('allAn', 0) if variant.gnomad else 0
-        if vcep_rule.min_allele_count and observed_an and observed_an < vcep_rule.min_allele_count:
-            return 0, ""
-        # Pick the AF: popmax for popmax/grpmax/faf95; else max(gnomAD allAf, 0). Missing
-        # from gnomAD entirely is treated as AF=0 (variant absent from controls → PM2 fires).
-        af_source_label = "gnomAD allAf"
-        af_for_compare = variant.gnomad.get('allAf', 0) if variant.gnomad else 0
-        if vcep_rule.metric in ("popmax", "grpmax", "faf95"):
-            popmax_af = variant.gnomad.get('popmax') if variant.gnomad else None
-            if popmax_af is not None:
-                af_for_compare = popmax_af
-                af_source_label = "gnomAD popmax"
-        cmp = vcep_rule.comparator
-        threshold = vcep_rule.threshold
-        fires = (
-            (cmp == '>=' and af_for_compare >= threshold) or
-            (cmp == '>'  and af_for_compare >  threshold) or
-            (cmp == '<=' and af_for_compare <= threshold) or
-            (cmp == '<'  and af_for_compare <  threshold)
-        )
-        if fires:
-            strength_to_score = {"VeryStrong": 4, "Strong": 3, "Moderate": 2, "Supporting": 1}
-            score = strength_to_score.get(vcep_rule.strength, 1)
-            label = "PM2" if score == 3 else f"PM2_{score_to_hum_readable[score]}"
-            if threshold == 0:
-                pm2 = (
-                    f"{label}: variant absent from controls ({af_source_label}={af_for_compare*100:.5f}%) "
-                    f"per VCEP {vcep_rule.gn_id} v{vcep_rule.version} for gene {variant.geneName}."
-                )
-            else:
-                pm2 = (
-                    f"{label}: {af_source_label}={af_for_compare*100:.5f}% {cmp} "
-                    f"VCEP {vcep_rule.gn_id} v{vcep_rule.version}-based threshold {threshold*100:.5f}% for gene {variant.geneName}."
-                )
-        return score, pm2
+        if not vcep_rule.min_allele_count or observed_an >= vcep_rule.min_allele_count:
+            # Pick the AF: popmax for popmax/grpmax/faf95; else max(gnomAD allAf, 0). Missing
+            # from gnomAD entirely is treated as AF=0 (variant absent from controls → PM2 fires).
+            af_source_label = "gnomAD allAf"
+            af_for_compare = variant.gnomad.get('allAf', 0) if variant.gnomad else 0
+            if vcep_rule.metric in ("popmax", "grpmax", "faf95"):
+                popmax_af = variant.gnomad.get('popmax') if variant.gnomad else None
+                if popmax_af is not None:
+                    af_for_compare = popmax_af
+                    af_source_label = "gnomAD popmax"
+            cmp = vcep_rule.comparator
+            threshold = vcep_rule.threshold
+            fires = (
+                (cmp == '>=' and af_for_compare >= threshold) or
+                (cmp == '>'  and af_for_compare >  threshold) or
+                (cmp == '<=' and af_for_compare <= threshold) or
+                (cmp == '<'  and af_for_compare <  threshold)
+            )
+            if fires:
+                strength_to_score = {"VeryStrong": 4, "Strong": 3, "Moderate": 2, "Supporting": 1}
+                score = strength_to_score.get(vcep_rule.strength, 1)
+                label = "PM2" if score == 3 else f"PM2_{score_to_hum_readable[score]}"
+                if threshold == 0:
+                    pm2 = (
+                        f"{label}: variant absent from controls ({af_source_label}={af_for_compare*100:.5f}%) "
+                        f"per VCEP {vcep_rule.gn_id} v{vcep_rule.version} for gene {variant.geneName}."
+                    )
+                else:
+                    pm2 = (
+                        f"{label}: {af_source_label}={af_for_compare*100:.5f}% {cmp} "
+                        f"VCEP {vcep_rule.gn_id} v{vcep_rule.version}-based threshold {threshold*100:.5f}% for gene {variant.geneName}."
+                    )
+            return score, pm2
 
     # Retrieve allele frequencies safely
     gnomad_af = variant.gnomad.get('allAf', 0) if variant.gnomad else None

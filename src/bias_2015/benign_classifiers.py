@@ -13,7 +13,7 @@ def get_ba1(variant, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi
     Three-step cutoff resolution:
       1. VCEP rule from the ClinGen Criteria Specification Registry (per-gene override).
       2. Missense o/e upper × MOI (AD/AR) stratified table (`mis_oe_upper_binned_cutoffs.tsv`).
-      3. Plain ACMG-2015 default (BA1 > 5%).
+      3. Data-derived fallback (`ACMG_DEFAULT_AF_CUTOFFS["BA1"]` = 0.1%).
     """
     ba1 = ""
     score = 0
@@ -23,8 +23,10 @@ def get_ba1(variant, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi
     gnomad_af = variant.gnomad.get('allAf', 0) if variant.gnomad else 0
     highest_af = max(onekg_af, gnomad_af)
 
-    # Default (level 3): ACMG BA1 threshold.
+    # Default (level 3): ACMG BA1 threshold. Comparator is `>` for the fallback and mis_oe
+    # tiers; only VCEP rules can override it (e.g. some rules specify `>=`).
     ba1_cutoff = ACMG_DEFAULT_AF_CUTOFFS["BA1"]
+    ba1_comparator = ">"
     threshold_source_label = "ACMG default"
 
     # Level 2: mis_oe × MOI stratified table.
@@ -40,8 +42,9 @@ def get_ba1(variant, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi
         if vcep_rule.strength == "NotApplicable":
             return 0, f"BA1: VCEP {vcep_rule.gn_id} v{vcep_rule.version} marks BA1 Not Applicable for gene {variant.geneName}."
         # Skip the VCEP rule if it requires a minimum gnomAD allele count the variant lacks.
+        # Missing AN (0) fails the gate: without an AN we can't confirm the VCEP's evidence floor.
         observed_an = variant.gnomad.get('allAn', 0) if variant.gnomad else 0
-        if not (vcep_rule.min_allele_count and observed_an and observed_an < vcep_rule.min_allele_count):
+        if not vcep_rule.min_allele_count or observed_an >= vcep_rule.min_allele_count:
             # VCEP metrics popmax/grpmax/faf95 use variant.gnomad['popmax'] (computed at
             # extraction time). Fall back to raw_af if popmax isn't populated.
             if vcep_rule.metric in ("popmax", "grpmax", "faf95"):
@@ -51,14 +54,21 @@ def get_ba1(variant, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi
                     onekg_af = 0
                     gnomad_af = popmax_af
             ba1_cutoff = vcep_rule.threshold
+            ba1_comparator = vcep_rule.comparator or ">"
             threshold_source_label = f"VCEP {vcep_rule.gn_id} v{vcep_rule.version}"
 
-    # Check if the variant exceeds the BA1 threshold
-    if highest_af > ba1_cutoff:
+    # Check if the variant exceeds the BA1 threshold, honoring the VCEP rule's comparator
+    # (falls back to `>` for the mis_oe/ACMG-default tiers).
+    def fires(af):
+        if ba1_comparator == ">=":
+            return af >= ba1_cutoff
+        return af > ba1_cutoff
+
+    if fires(highest_af):
         score = 5
-        source = "both One Thousand Genomes & GnomAD" if onekg_af > ba1_cutoff and gnomad_af > ba1_cutoff else \
-                 "One Thousand Genomes" if onekg_af > ba1_cutoff else "GnomAD"
-        ba1 = f"BA1: {source} general population AF={highest_af*100:.5f}% exceeds " + \
+        source = "both One Thousand Genomes & GnomAD" if fires(onekg_af) and fires(gnomad_af) else \
+                 "One Thousand Genomes" if fires(onekg_af) else "GnomAD"
+        ba1 = f"BA1: {source} general population AF={highest_af*100:.5f}% {ba1_comparator} " + \
                 f"{threshold_source_label}-based threshold ({ba1_cutoff*100:.5f}%)."
 
     return score, ba1
@@ -87,7 +97,8 @@ def get_bs1(variant, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi
     Three-step cutoff resolution:
       1. VCEP rule → use its threshold + strength.
       2. Missense o/e upper × MOI (AD/AR) table → BS1 Strong / BS1_Moderate / BS1_Supporting rows.
-      3. Plain ACMG-2015 default → BS1 Strong only, threshold 0.1% (0.001).
+      3. Data-derived fallback → BS1 Strong / Moderate / Supporting from
+         `ACMG_DEFAULT_AF_CUTOFFS` (0.05% / 0.005% / 0.001%).
 
     evRepo strengths: BS1 (3) = Strong, BS1_Moderate (2), BS1_Supporting (1).
     """
@@ -104,33 +115,34 @@ def get_bs1(variant, vcep_af_rules=None, mis_oe_moi_af_cutoffs=None, gene_to_moi
     if vcep_rule is not None:
         if vcep_rule.strength == "NotApplicable":
             return 0, f"BS1: VCEP {vcep_rule.gn_id} v{vcep_rule.version} marks BS1 Not Applicable for gene {variant.geneName}."
+        # Missing AN (0) fails the gate: without an AN we can't confirm the VCEP's evidence floor.
+        # If the gate fails, fall through to the mis_oe/MOI tier and then the flat fallback.
         observed_an = variant.gnomad.get('allAn', 0) if variant.gnomad else 0
-        if vcep_rule.min_allele_count and observed_an and observed_an < vcep_rule.min_allele_count:
-            return 0, ""
-        af_for_compare = highest_af
-        af_source_label = "general population AF"
-        if vcep_rule.metric in ("popmax", "grpmax", "faf95"):
-            popmax_af = variant.gnomad.get('popmax') if variant.gnomad else None
-            if popmax_af is not None:
-                af_for_compare = popmax_af
-                af_source_label = "gnomAD popmax"
-        cmp = vcep_rule.comparator
-        threshold = vcep_rule.threshold
-        fires = (
-            (cmp == '>=' and af_for_compare >= threshold) or
-            (cmp == '>'  and af_for_compare >  threshold) or
-            (cmp == '<=' and af_for_compare <= threshold) or
-            (cmp == '<'  and af_for_compare <  threshold)
-        )
-        if fires:
-            strength_to_score = {"StandAlone": 5, "VeryStrong": 4, "Strong": 3, "Moderate": 2, "Supporting": 1}
-            score = strength_to_score.get(vcep_rule.strength, 3)
-            label = "BS1" if score == 3 else f"BS1_{score_to_hum_readable[score]}"
-            bs1 = (
-                f"{label}: {af_source_label}={af_for_compare*100:.5f}% {cmp} "
-                f"VCEP {vcep_rule.gn_id} v{vcep_rule.version}-based threshold {threshold*100:.5f}% for gene {variant.geneName}."
+        if not vcep_rule.min_allele_count or observed_an >= vcep_rule.min_allele_count:
+            af_for_compare = highest_af
+            af_source_label = "general population AF"
+            if vcep_rule.metric in ("popmax", "grpmax", "faf95"):
+                popmax_af = variant.gnomad.get('popmax') if variant.gnomad else None
+                if popmax_af is not None:
+                    af_for_compare = popmax_af
+                    af_source_label = "gnomAD popmax"
+            cmp = vcep_rule.comparator
+            threshold = vcep_rule.threshold
+            fires = (
+                (cmp == '>=' and af_for_compare >= threshold) or
+                (cmp == '>'  and af_for_compare >  threshold) or
+                (cmp == '<=' and af_for_compare <= threshold) or
+                (cmp == '<'  and af_for_compare <  threshold)
             )
-        return score, bs1
+            if fires:
+                strength_to_score = {"StandAlone": 5, "VeryStrong": 4, "Strong": 3, "Moderate": 2, "Supporting": 1}
+                score = strength_to_score.get(vcep_rule.strength, 3)
+                label = "BS1" if score == 3 else f"BS1_{score_to_hum_readable[score]}"
+                bs1 = (
+                    f"{label}: {af_source_label}={af_for_compare*100:.5f}% {cmp} "
+                    f"VCEP {vcep_rule.gn_id} v{vcep_rule.version}-based threshold {threshold*100:.5f}% for gene {variant.geneName}."
+                )
+            return score, bs1
 
     # Level 2: mis_oe × MOI stratified BS1 (Strong / Moderate / Supporting) if the gene is covered.
     strong = get_mis_oe_moi_cutoff(mis_oe_moi_af_cutoffs, variant, "BS1", gene_to_moi)

@@ -461,8 +461,9 @@ def get_gene_to_vcep_af_rules(vcep_af_cutoffs_fp):
     Load the VCEP AF cutoffs TSV produced by src/preprocessing/generate_vcep_af_cutoffs.py.
 
     Returns {gene_symbol: {acmg_code: [VcepAfRule, ...]}}. Multiple rules per code
-    are allowed (e.g., a code with both Strong and Supporting strength thresholds);
-    the classifier picks the strongest that fires.
+    are allowed (e.g., a code with both Strong and Supporting strength thresholds).
+    `vcep_lookup.get_vcep_rule` picks the strongest applicable rule (respecting MoI)
+    and passes only that one to the classifier; NotApplicable takes precedence.
 
     The TSV has a header row and these columns (see generate_vcep_af_cutoffs.py):
         gene_symbol, hgnc_id, acmg_code, strength, threshold, comparator, metric,

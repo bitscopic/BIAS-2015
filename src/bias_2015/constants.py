@@ -182,20 +182,22 @@ pathogenic_thresholds = {
 # Fallback AF cutoffs used by BA1/BS1/PM2 when neither a VCEP rule nor the missense o/e × MOI
 # stratified table (see mis_oe_moi_lookup) covers the gene.
 #
-# Values are the median cutoffs across all AD/AR bins in mis_oe_upper_binned_cutoffs.tsv, giving
-# a data-derived fallback instead of the historical flat ACMG 2015 defaults (BA1 5%, BS1 0.1%,
-# PM2 0.1%). The plain 5% BA1 threshold was empirically too permissive: it left many true
-# benigns in VUS in the fallback path because their AF sat in the 0.1%–5% band. Using the median
-# of the stratified table places BA1 at ~1%, consistent with the AD/AR-stratified evidence.
+# Values are data-derived from mis_oe_upper_binned_cutoffs.tsv rather than the historical flat
+# ACMG 2015 defaults (BA1 5%, BS1 0.1%, PM2 0.1%). The plain 5% BA1 threshold was empirically
+# too permissive: it left many true benigns in VUS in the fallback path because their AF sat in
+# the 0.1%–5% band. The tightened BA1 (0.1%) and stratified BS1 tiers below reflect the
+# AD/AR-stratified evidence in the mis_oe table.
 #
 # BS1 fires at three strengths in this fallback path (Strong / Moderate / Supporting), matching
-# the mis_oe/MOI branch. PM2 fires at Supporting only, matching the mis_oe/MOI branch.
+# the mis_oe/MOI branch. PM2 fires at Supporting only, matching the mis_oe/MOI branch. The
+# PM2_Supporting cutoff sits a full order of magnitude below BS1_Supporting so the two never
+# overlap.
 ACMG_DEFAULT_AF_CUTOFFS = {
     "BA1":             0.001,    # 0.1%
     "BS1_Strong":      0.0005,   # 0.05%
     "BS1_Moderate":    0.00005,  # 0.005%
     "BS1_Supporting":  0.00001,  # 0.001%
-    "PM2_Supporting":  0.000001, # 0.0001% (fires when AF < this — full order-of-magnitude gap from BS1_Supporting)
+    "PM2_Supporting":  0.000001, # 0.0001% (fires when AF < this)
 }
 
 
