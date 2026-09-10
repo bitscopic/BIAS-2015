@@ -264,6 +264,12 @@ Eisenhart, C., Brickey, R., Nadon, B. et al. Automating ACMG variant classificat
 analysis and benchmark against the FDA-approved eRepo dataset. Genome Med 17, 148 (2025).
 https://doi.org/10.1186/s13073-025-01581-y
 
+Please use the following citation information when referencing the VCEP cutoff table and/or
+the derived missesense o/e values per mode of inheritance
+
+Dubey, V. & Eisenhart, C.E. Empirically calibrated allele frequency thresholds for ACMG BA1, BS1 and PM2 evidence
+criteria. medRxiv (2026). https://doi.org/10.64898/2026.09.07.26362456
+
 
 ## Who do I talk to? ##
 For algorithm questions please contact - 
