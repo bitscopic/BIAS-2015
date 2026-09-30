@@ -1,13 +1,17 @@
 # BIAS-2015 #
 Bitscopic Interpreting ACMG 2015 Standards
- 
-This software is dual licensed. Commercial use requires a license. [Contact us](mailto:bill@bitscopic.com) to discuss a commercial license to fit your needs. The software is free for academic use and is made available under the AGPL license for that purpose.
 
-BIAS-2015 also has a graphical user interface [BIAS-2015-ui](https://github.com/bitscopic/BIAS-2015-ui) available to
-view and modify classification results.
+This repository contains the publicly available research/reference release of BIAS-2015.
 
-BIAS-2015 is the core variant classification engine for Bitscopic's commercial platform that supports tertiary analysis and
-report generation. BIAS can be extended to support lab specific customizations. For a commercial demo please [contact us](mailto:bill@bitscopic.com). 
+**BIAS-2015 is actively maintained and updated. For access to the most current release, updated supporting resources, and the latest available algorithm improvements, researchers and commercial users are encouraged to contact [Bitscopic](mailto:info@bitscopic.com)**
+
+BIAS-2015 is dual licensed. Noncommercial academic use is available under the AGPL license. Commercial use, OEM integration, supported deployment, and incorporation into commercial products require a separate commercial license from Bitscopic.
+
+A graphical user interface, [BIAS-2015-ui](https://github.com/bitscopic/BIAS-2015-ui), is also available for viewing and modifying classification results.
+
+BIAS-2015 serves as the core variant-classification engine within Bitscopic’s commercial genomic analysis platform and can be configured to support laboratory-specific workflows and requirements.
+
+Current maintained releases, implementation support, commercial deployment options, and additional licensed algorithm components are available directly from Bitscopic. Researchers interested in using the latest version for ongoing or planned studies are also encouraged to reach out to discuss current availability and appropriate licensing.
 
 ## Setup ##
 
