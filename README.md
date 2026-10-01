@@ -5,11 +5,11 @@ This repository contains the publicly available research/reference release of BI
 
 **BIAS-2015 is actively maintained and updated. For access to the most current release, updated supporting resources, and the latest available algorithm improvements, researchers and commercial users are encouraged to contact [Bitscopic](mailto:info@bitscopic.com)**
 
-BIAS-2015 is dual licensed. Noncommercial academic use is available under the AGPL license. Commercial use, OEM integration, supported deployment, and incorporation into commercial products require a separate commercial license from Bitscopic.
+BIAS-2015 is dual licensed. Noncommercial academic use is available under the AGPL v3 license. Commercial use, OEM integration, supported deployment, and incorporation into commercial products require a separate commercial license from Bitscopic.
 
 A graphical user interface, [BIAS-2015-ui](https://github.com/bitscopic/BIAS-2015-ui), is also available for viewing and modifying classification results.
 
-BIAS-2015 serves as the core variant-classification engine within Bitscopic’s commercial genomic analysis platform and can be configured to support laboratory-specific workflows and requirements.
+BIAS-2015 serves as the core variant-classification engine within Bitscopic's commercial genomic tertiary analysis platform, [PraediGene](https://bitscopic.com/solutions/praedigene/), and can be configured to support laboratory-specific workflows and requirements.
 
 Current maintained releases, implementation support, commercial deployment options, and additional licensed algorithm components are available directly from Bitscopic. Researchers interested in using the latest version for ongoing or planned studies are also encouraged to reach out to discuss current availability and appropriate licensing.
 
