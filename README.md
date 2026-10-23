@@ -245,10 +245,7 @@ https://doi.org/10.1186/s13073-025-01581-y
 
 
 ## Who do I talk to? ##
-For algorithm questions please contact - 
+For algorithm questions, please contact - 
+bias-2015@bitscopic.com
 
-Chris Eisenhart chris.eisenhart@bitscopic.com 
 
-Rachel Brickey rachel@bitscopic.com
-
-Joel Mewton joel@bitscopic.com
